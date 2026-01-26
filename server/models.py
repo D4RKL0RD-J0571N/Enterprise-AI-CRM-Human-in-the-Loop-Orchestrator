@@ -42,3 +42,106 @@ class Message(Base):
     metadata_json = Column(Text, default="{}") # Stores intent, tone, reasoning in JSON format
     
     conversation = relationship("Conversation", back_populates="messages")
+
+
+class AIConfig(Base):
+    __tablename__ = "ai_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_name = Column(String, default="My AI Assistant")
+    business_description = Column(Text, default="A professional business.")
+    tone = Column(String, default="friendly, concise, and professional")
+    rules_json = Column(Text, default="[]") # List of behavioral rules
+    
+    # Thresholds (0-100)
+    auto_respond_threshold = Column(Integer, default=85)
+    review_threshold = Column(Integer, default=60)
+    auto_send_delay = Column(Integer, default=30) # Delay in seconds before auto-sending
+    
+    # Context Guardrails
+    keywords_json = Column(Text, default="[]") # Allowed topics
+    forbidden_topics_json = Column(Text, default="[]") # Topics to ignore
+    
+    # Multilingual Support
+    language_code = Column(String, default="es-CR")
+    translate_messages = Column(Boolean, default=False)
+    
+    # Advanced Prompting (Dynamic Overrides)
+    identity_prompt = Column(Text, nullable=True)
+    grounding_template = Column(Text, nullable=True)
+    intent_rules_json = Column(Text, default="[]") 
+    fallback_message = Column(Text, default="I am currently having trouble processing your request.")
+    preferred_model = Column(String, default="gpt-4-turbo")
+    # Branding & UI/UX (SaaS White-Label)
+    logo_url = Column(String, nullable=True)
+    primary_color = Column(String, default="#2563eb") # Tailwind blue-600 default
+    ui_density = Column(String, default="comfortable") # "compact" or "comfortable"
+    
+    is_active = Column(Boolean, default=True)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+
+class SecurityAudit(Base):
+    __tablename__ = "security_audits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(String)
+    input_message = Column(Text)
+    output_message = Column(Text)
+    domain = Column(String)
+    intent = Column(String)
+    confidence = Column(Integer)
+    latency_ms = Column(Integer)
+    model_name = Column(String)
+    tokens_used = Column(Integer)
+    status = Column(String) # "Passed", "Blocked", "Latency_Violation"
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    reasoning = Column(Text)
+    triggered_keywords = Column(Text) # JSON list
+
+
+class AIDataset(Base):
+    __tablename__ = "ai_datasets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    data_type = Column(String) # "csv", "json", "api", "sql"
+    content = Column(Text) # Raw data or configuration URI
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class AIConfigSnapshot(Base):
+    __tablename__ = "ai_config_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    config_id = Column(Integer, ForeignKey("ai_configs.id"))
+    
+    # Snapshot of all config fields
+    business_name = Column(String)
+    business_description = Column(Text)
+    tone = Column(String)
+    rules_json = Column(Text)
+    auto_respond_threshold = Column(Integer)
+    review_threshold = Column(Integer)
+    auto_send_delay = Column(Integer)
+    keywords_json = Column(Text)
+    forbidden_topics_json = Column(Text)
+    language_code = Column(String)
+    translate_messages = Column(Boolean)
+    identity_prompt = Column(Text, nullable=True)
+    grounding_template = Column(Text, nullable=True)
+    intent_rules_json = Column(Text)
+    fallback_message = Column(Text)
+    preferred_model = Column(String)
+    
+    # Snapshot Branding
+    logo_url = Column(String, nullable=True)
+    primary_color = Column(String)
+    
+    # Advanced Version Management
+    version_name = Column(String, nullable=True)
+    is_locked = Column(Boolean, default=False)
+    
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    version_label = Column(String, nullable=True) # DEPRECATED: use version_name

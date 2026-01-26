@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import whatsapp, websocket, conversations
+from routers import whatsapp, websocket, conversations, admin
 from database import engine, Base
 from logger import setup_logger
 
@@ -26,6 +26,7 @@ app.add_middleware(
 app.include_router(whatsapp.router)
 app.include_router(websocket.router)
 app.include_router(conversations.router)
+app.include_router(admin.router)
 
 @app.get("/")
 def root():

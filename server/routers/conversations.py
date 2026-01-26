@@ -34,6 +34,7 @@ class ConversationSummary(BaseModel):
     is_active: bool
     is_archived: bool = False
     is_pinned: bool = False
+    has_pending: bool = False
 
     class Config:
         orm_mode = True
@@ -76,7 +77,8 @@ def get_conversations(db: Session = Depends(get_db)):
                 "last_message_time": last_msg.timestamp if last_msg else conv.started_at,
                 "is_active": conv.is_active,
                 "is_archived": conv.is_archived,
-                "is_pinned": conv.is_pinned
+                "is_pinned": conv.is_pinned,
+                "has_pending": any(m.status == "pending" for m in conv.messages)
             })
             
     # Sort by pinned first, then time desc
@@ -197,3 +199,20 @@ async def unpin_conversation(conversation_id: int, db: Session = Depends(get_db)
     conv.is_pinned = False
     db.commit()
     return {"status": "unpinned"}
+
+@router.delete("/{conversation_id}")
+async def delete_conversation(conversation_id: int, db: Session = Depends(get_db)):
+    """
+    Delete a conversation and all its messages.
+    """
+    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    # Cascade delete messages manually if not handled by DB FK
+    db.query(Message).filter(Message.conversation_id == conversation_id).delete()
+    db.delete(conv)
+    db.commit()
+    
+    logger.info(f"Conversation {conversation_id} and its messages DELETED")
+    return {"status": "deleted"}

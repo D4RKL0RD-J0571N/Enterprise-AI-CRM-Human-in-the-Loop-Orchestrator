@@ -12,22 +12,27 @@ A production-ready Client Relationship Management (CRM) system that integrates L
 - **Intent Recognition**: Analyzes user messages to determine intent (e.g., "Support", "Sales", "Greeting").
 - **Confidence Scoring**: Assigns a confidence score to every AI suggestion.
 
+### 🔒 SaaS Security Sentinel
+- **Dynamic Pre-Scan**: Automatically blocks high-risk content (politics, medical, abuse) before it reaches the LLM.
+- **Business Boundaries**: Clearly distinguishes between "Out of Scope" (friendly redirect) and "Security Violations" (cold block).
+- **Audit Logging**: Full tracking of detected intents, blocked attempts, and latency metrics for compliance.
+
 ### 🛡️ Human-in-the-Loop (HITL)
 - **Review Queue**: AI suggestions appear as "Pending" requiring human approval.
-- **Instant Actions**: One-click **Approve**, **Edit**, or **Reject** suggestions.
-- **Live Metadata**: View AI reasoning, intent, and confidence scores in real-time.
+- **Reasoning Viewer**: Inspect the AI's internal logic, intent classification, and confidence score before approving.
+- **Instant Actions**: One-click **Approve**, **Edit**, **Reject**, or **Delete** messages.
 - **Optimistic UI**: Instant feedback on actions for a smooth user experience.
 
 ### 💬 Conversation Management
 - **Real-time Chat**: WebSocket-powered live chat interface.
-- **Pin & Archive**: Pin important chats to the top or archive old ones to keep the view clean.
+- **Full CRUD**: Create, Pin, Archive, and **Delete** conversations with cascading message removal.
+- **Status Indicators**: Visual "Pulse" badges for conversations requiring immediate attention (Pending Review).
 - **Multi-Client Simulation**: Built-in tools to simulate incoming messages from different clients.
-- **Context Menus**: Right-click actions for quick management (Copy, Delete, Pin, Archive).
 
-### 🎨 Modern UI/UX
+### 🎨 Modern UI/UX (White-Label Ready)
 - **Dark/Light Mode**: Fully responsive theme support.
+- **B2B Customizable**: Ready for dynamic branding (Logo, Primary Color).
 - **Glassmorphism Design**: Sleek, modern aesthetic using Tailwind CSS v4.
-- **Fluid Animations**: Smooth transitions for a premium feel.
 
 ## 🛠️ Technology Stack
 

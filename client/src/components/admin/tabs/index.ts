@@ -1,0 +1,9 @@
+export { IdentityTab } from './IdentityTab';
+export { BehaviorTab } from './BehaviorTab';
+export { DatasetsTab } from './DatasetsTab';
+export { AdvancedTab } from './AdvancedTab';
+export { SnapshotsTab } from './SnapshotsTab';
+export { AnalyticsTab } from './AnalyticsTab';
+export { SandboxTab } from './SandboxTab';
+export { AuditTab } from './AuditTab';
+export { BrandingTab } from './BrandingTab';
