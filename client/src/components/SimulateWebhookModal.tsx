@@ -73,7 +73,8 @@ export default function SimulateWebhookModal({ isOpen, onClose, onSimulate }: Si
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                        className="w-full text-white font-medium py-2 rounded flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-lg"
+                        style={{ backgroundColor: "var(--brand-primary)", boxShadow: "0 4px 6px -1px var(--brand-primary-muted)" }}
                     >
                         {loading ? t('simulate.sending') : (
                             <>

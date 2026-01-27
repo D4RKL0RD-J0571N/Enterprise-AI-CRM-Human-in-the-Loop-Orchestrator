@@ -42,6 +42,9 @@ class ConversationSummary(BaseModel):
 class MessageUpdate(BaseModel):
     content: str
 
+class MessageCreate(BaseModel):
+    content: str
+
 @router.get("/", response_model=List[ConversationSummary])
 def get_conversations(db: Session = Depends(get_db)):
     """
@@ -216,3 +219,69 @@ async def delete_conversation(conversation_id: int, db: Session = Depends(get_db
     
     logger.info(f"Conversation {conversation_id} and its messages DELETED")
     return {"status": "deleted"}
+
+class BulkActionRequest(BaseModel):
+    conversation_ids: List[int]
+    action: str  # "archive", "delete"
+
+@router.post("/bulk-action")
+async def bulk_conversation_action(req: BulkActionRequest, db: Session = Depends(get_db)):
+    """
+    Perform bulk actions on multiple conversations.
+    """
+    if not req.conversation_ids:
+        return {"status": "no_op", "count": 0}
+
+    logger.info(f"Processing bulk action '{req.action}' for {len(req.conversation_ids)} conversations")
+    
+    if req.action == "archive":
+        db.query(Conversation).filter(Conversation.id.in_(req.conversation_ids)).update(
+            {Conversation.is_archived: True}, synchronize_session=False
+        )
+        db.commit()
+        return {"status": "success", "action": "archive", "count": len(req.conversation_ids)}
+        
+    elif req.action == "delete":
+        # Delete messages first
+        db.query(Message).filter(Message.conversation_id.in_(req.conversation_ids)).delete(synchronize_session=False)
+        # Delete conversations
+        db.query(Conversation).filter(Conversation.id.in_(req.conversation_ids)).delete(synchronize_session=False)
+        db.commit()
+        return {"status": "success", "action": "delete", "count": len(req.conversation_ids)}
+        
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action")
+
+@router.post("/{conversation_id}/messages")
+async def send_human_message(conversation_id: int, req: MessageCreate, db: Session = Depends(get_db)):
+    """
+    Send a message from the human operator.
+    """
+    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    msg = Message(
+        conversation_id=conversation_id,
+        sender="agent",
+        content=req.content,
+        status="sent",
+        is_ai_generated=False
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    
+    # Broadcast to sync all dashboard instances
+    client_phone = conv.client.phone_number
+    await manager.broadcast(json.dumps({
+        "id": msg.id,
+        "sender": "agent",
+        "content": msg.content,
+        "phone": client_phone,
+        "timestamp": msg.timestamp.isoformat(),
+        "status": "sent",
+        "is_ai_generated": False
+    }))
+    
+    return {"status": "sent", "id": msg.id}

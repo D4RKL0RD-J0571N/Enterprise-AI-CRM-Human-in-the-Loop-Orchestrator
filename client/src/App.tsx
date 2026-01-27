@@ -1,25 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import ChatDashboard from "./components/ChatDashboard";
 import AdminConfig from "./components/AdminConfig";
 import { useTranslation } from "react-i18next";
+import { BrandingProvider, useBrandingContext } from "./context/BrandingContext";
 
-function App() {
+function MainLayout() {
   const { t } = useTranslation();
   const [currentView, setCurrentView] = useState<"chat" | "admin">("chat");
-  const [brandColor, setBrandColor] = useState("#2563eb");
-
-  // Fetching config using standard browser Fetch
-  useEffect(() => {
-    fetch("/admin/config") // Adjust this URL to your FastAPI endpoint
-      .then(res => res.json())
-      .then(data => {
-        if (data.primary_color) {
-          setBrandColor(data.primary_color);
-          document.documentElement.style.setProperty('--brand-primary', data.primary_color);
-        }
-      })
-      .catch(err => console.error("Branding sync failed:", err));
-  }, []);
+  const { config, refreshBranding } = useBrandingContext();
 
   return (
     <div className="h-screen w-full bg-white dark:bg-gray-900 transition-colors duration-200 flex flex-col overflow-hidden">
@@ -32,16 +20,24 @@ function App() {
               <button
                 onClick={() => setCurrentView("chat")}
                 className="py-2 transition-opacity hover:opacity-75"
-                style={{ color: brandColor }}
+                style={{ color: config.primary_color || "#2563eb" }}
               >
                 {t('common.back_to_chat')}
               </button>
             </div>
-            <AdminConfig />
+            <AdminConfig onSave={refreshBranding} />
           </div>
         )}
       </main>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <BrandingProvider>
+      <MainLayout />
+    </BrandingProvider>
   );
 }
 

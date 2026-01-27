@@ -1,25 +1,44 @@
-import { useState, useEffect, useRef } from "react";
-import { Send, Phone, MoreVertical, Moon, Sun, Trash2, Copy, Edit2, ShieldAlert } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { ShieldAlert, Sun, Moon, Layout, Grid2X2, LayoutGrid, Monitor } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Menu, Item, Separator, useContextMenu } from 'react-contexify';
-import type { ItemParams } from 'react-contexify';
-import 'react-contexify/dist/ReactContexify.css';
-
-const MESSAGE_MENU_ID = "message-menu";
 import Sidebar from "./Sidebar";
 import InfoPanel from "./InfoPanel";
+import ChatWindow from "./ChatWindow";
 import SimulateWebhookModal from "./SimulateWebhookModal";
 
 interface ChatDashboardProps {
     onNavigate?: (view: "chat" | "admin") => void;
 }
 
+interface ChatSession {
+    conversationId: number;
+    clientName: string;
+    clientPhone: string;
+    messages: any[];
+    isThinking: boolean;
+    isLoading?: boolean;
+    layout?: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        zIndex: number;
+    };
+}
+
 export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
     const { t } = useTranslation();
-    const [messages, setMessages] = useState<{ id: number; role: string; sender: string; text: string; phone?: string; timestamp?: string; status?: string; is_ai_generated?: boolean; confidence?: number; metadata?: any }[]>([]);
+    const [sessions, setSessions] = useState<ChatSession[]>([]);
+
+    const [conversations, setConversations] = useState<any[]>([]);
+    const lastSyncRef = useRef<{ [key: number]: string }>({});
+    const hydrationLock = useRef(new Set<number>());
     const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
-    const [activeClientName, setActiveClientName] = useState<string>(t('chat.select_client'));
-    const [activeClientPhone, setActiveClientPhone] = useState<string>("");
+    const activeSession = sessions.find(s => s.conversationId === activeConversationId) || null;
+
+    const activeClientName = activeSession?.clientName || t('chat.select_client');
+    const activeClientPhone = activeSession?.clientPhone || "";
+
     const [isDarkMode, setIsDarkMode] = useState(() => {
         if (typeof window !== "undefined") {
             return localStorage.getItem("theme") === "dark" ||
@@ -27,12 +46,81 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
         }
         return false;
     });
-    const [isThinking, setIsThinking] = useState(false);
+
     const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
-    const [input, setInput] = useState("");
     const [securityAlert, setSecurityAlert] = useState<{ show: boolean; message: string; reason: string } | null>(null);
     const ws = useRef<WebSocket | null>(null);
     const activePhoneRef = useRef<string>("");
+
+    const [layoutMode, setLayoutMode] = useState<"focus" | "canvas">("canvas");
+    const maxZIndex = useRef(100);
+    const canvasRef = useRef<HTMLDivElement>(null);
+    const [draggingId, setDraggingId] = useState<number | null>(null);
+    const [resizingId, setResizingId] = useState<number | null>(null);
+    const dragOffset = useRef({ x: 0, y: 0 });
+
+    // PERSISTENCE: Save Workspace Config
+    useEffect(() => {
+        const saveConfig = setTimeout(async () => {
+            const workspaceConfig = {
+                open_conversations: sessions.map(s => s.conversationId),
+                layout_mode: layoutMode,
+                active_conversation_id: activeConversationId
+            };
+
+            try {
+                await fetch("http://localhost:8000/admin/workspace", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ config: JSON.stringify(workspaceConfig) })
+                });
+            } catch (e) {
+                console.error("Failed to save workspace", e);
+            }
+        }, 2000);
+        return () => clearTimeout(saveConfig);
+    }, [sessions, layoutMode, activeConversationId]);
+
+    // RESTORE: Load Workspace Config
+    useEffect(() => {
+        const checkIntegrity = async () => {
+            try {
+                const res = await fetch("http://localhost:8000/conversations/");
+                if (res.ok) {
+                    const validConvs = await res.json();
+                    const validIds = new Set(validConvs.map((c: any) => c.id));
+                    setSessions(prev => {
+                        // GRACE PERIOD: Don't eject sessions that are less than 15 seconds old
+                        const now = Date.now();
+                        const filtered = prev.filter(s => {
+                            const isOld = (s as any)._createdAt ? (now - (s as any)._createdAt > 15000) : false;
+                            return !isOld || validIds.has(s.conversationId);
+                        });
+                        if (filtered.length !== prev.length) return filtered;
+                        return prev;
+                    });
+                }
+            } catch (e) {
+                console.error("Integrity check failed", e);
+            }
+        };
+
+        fetch("http://localhost:8000/admin/config")
+            .then(res => res.json())
+            .then(data => {
+                if (data.workspace_config) {
+                    try {
+                        const conf = JSON.parse(data.workspace_config);
+                        if (conf.layout_mode) setLayoutMode(conf.layout_mode);
+                        if (conf.active_conversation_id) setActiveConversationId(conf.active_conversation_id);
+                    } catch (e) { }
+                }
+                checkIntegrity();
+            });
+
+        const integrityInterval = setInterval(checkIntegrity, 5000);
+        return () => clearInterval(integrityInterval);
+    }, []);
 
     useEffect(() => {
         activePhoneRef.current = activeClientPhone;
@@ -48,87 +136,296 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
         }
     }, [isDarkMode]);
 
+    const tRef = useRef(t);
+    useEffect(() => { tRef.current = t; }, [t]);
+
     useEffect(() => {
-        const socket = new WebSocket("ws://localhost:8000/ws/chat");
+        let socket: WebSocket | null = new WebSocket("ws://localhost:8000/ws/chat");
         ws.current = socket;
 
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
-
-            // --- SECURITY SENTINEL ---
             if (data.event === 'security_alert') {
                 setSecurityAlert({ show: true, message: data.message, reason: data.reason });
                 setTimeout(() => setSecurityAlert(null), 8000);
                 return;
             }
 
-            if (activePhoneRef.current && data.phone === activePhoneRef.current) {
-                if (data.sender === "agent") setIsThinking(false);
+            setSessions(prev => prev.map(session => {
+                if (session.clientPhone === data.phone) {
+                    const isFromClient = data.sender === "user";
+                    const isAI = data.is_ai_generated;
 
-                setMessages((prev) => {
-                    const exists = prev.find(m => m.id === data.id);
-                    if (exists) {
-                        return prev.map(m => m.id === data.id ? {
-                            ...m,
-                            status: data.status,
-                            text: data.content,
-                            confidence: data.confidence,
-                            metadata: data.metadata
-                        } : m);
-                    }
-                    return [...prev, {
+                    const formatted = {
                         id: data.id,
-                        role: data.sender,
-                        sender: data.sender === "user" ? t('chat.client') : t('chat.ai_agent'),
+                        role: isFromClient ? "client" : "user",
+                        sender: isFromClient
+                            ? tRef.current('chat.client_label')
+                            : (isAI ? `🤖 ${tRef.current('chat.ai_label')}` : `👤 ${tRef.current('chat.you')}`),
+                        is_ai: isAI,
                         text: data.content,
                         phone: data.phone,
                         timestamp: data.timestamp,
-                        status: data.status,
-                        is_ai_generated: data.is_ai_generated,
-                        confidence: data.confidence,
-                        metadata: data.metadata
-                    }];
-                });
+                        status: data.status || 'sent',
+                        metadata: typeof data.metadata === 'string' ? JSON.parse(data.metadata || '{}') : (data.metadata || {})
+                    };
+
+                    // Optimistic resolution: remove pending/sending if real one arrives
+                    const existsIdx = session.messages.findIndex(m => m.id === data.id || (m.status === 'sending' && m.text === data.content));
+                    let newMessages = [...session.messages];
+
+                    if (existsIdx !== -1) {
+                        newMessages[existsIdx] = formatted;
+                    } else {
+                        newMessages.push(formatted);
+                    }
+
+                    return {
+                        ...session,
+                        messages: newMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()),
+                        isThinking: isFromClient
+                    };
+                }
+                return session;
+            }));
+
+            if (data.sender !== 'agent') {
+                triggerNotification();
             }
         };
 
-        return () => socket.close();
+        socket.onerror = (err) => {
+            console.warn("WebSocket Tool Error:", err);
+        };
+
+        return () => {
+            if (socket) {
+                // Ensure no more callbacks trigger
+                socket.onmessage = null;
+                socket.onopen = null;
+                socket.onerror = null;
+                socket.onclose = null;
+                // Graceful close: if connecting, handle establish then close
+                if (socket.readyState === WebSocket.CONNECTING) {
+                    socket.onopen = () => { socket?.close(); };
+                } else if (socket.readyState === WebSocket.OPEN) {
+                    socket.close();
+                }
+                socket = null;
+            }
+        };
     }, []);
 
+    const triggerNotification = () => {
+        const originalTitle = document.title;
+        let count = 0;
+        const interval = setInterval(() => {
+            document.title = count % 2 === 0 ? "🔔 (1) New Message!" : originalTitle;
+            count++;
+            if (count > 5) {
+                clearInterval(interval);
+                document.title = originalTitle;
+            }
+        }, 1000);
+
+        // Removed Pixabay audio to fix 403 errors.
+    };
+
+    // LIVE SYNC POLLING: Run every 4s, but don't re-create interval on every session change
+    const sessionsRef = useRef(sessions);
+    useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
+
     useEffect(() => {
-        if (activeConversationId) {
-            fetchMessages(activeConversationId);
-            setIsThinking(false);
-        }
-    }, [activeConversationId]);
+        const syncList = async () => {
+            try {
+                const res = await fetch("http://localhost:8000/conversations/");
+                if (res.ok) {
+                    const list = await res.json();
+                    setConversations(list);
+
+                    // Check for updates in active sessions
+                    list.forEach((c: any) => {
+                        const prevTime = lastSyncRef.current[c.id];
+                        if (prevTime && prevTime !== c.last_message_time) {
+                            // Message arrived! Refresh windows if open
+                            const sessionOpen = sessionsRef.current.find(s => Number(s.conversationId) === Number(c.id));
+                            if (sessionOpen) {
+                                console.log("LIVE: Message update detected for", c.id);
+                                fetchMessages(c.id);
+                            }
+                            triggerNotification();
+                        }
+                        lastSyncRef.current[c.id] = c.last_message_time;
+                    });
+                }
+            } catch (e) { }
+        };
+
+        const interval = setInterval(syncList, 4000);
+        return () => clearInterval(interval);
+    }, []);
 
     async function fetchMessages(convId: number) {
-        const res = await fetch(`http://localhost:8000/conversations/${convId}/messages`);
-        if (res.ok) {
-            const data = await res.json();
-            setMessages(data.map((d: any) => ({
-                id: d.id,
-                role: d.sender,
-                sender: d.sender === "user" ? t('chat.client') : t('chat.ai_agent'),
-                text: d.content,
-                phone: "",
-                timestamp: d.timestamp,
-                status: d.status,
-                is_ai_generated: d.is_ai_generated,
-                confidence: d.confidence,
-                metadata: typeof d.metadata_json === 'string' ? JSON.parse(d.metadata_json || '{}') : (d.metadata_json || {})
-            })));
+        const id = Number(convId);
+        // INTERNAL GUARD: Don't fetch if currently fetching or already hydrated recently
+        if (hydrationLock.current.has(id)) return;
+
+        hydrationLock.current.add(id);
+        console.log("FETCH: Hydrating session", id);
+        try {
+            const res = await fetch(`http://localhost:8000/conversations/${convId}/messages?v=${Date.now()}`, {
+                headers: { 'Cache-Control': 'no-cache' }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const formatted = data.map((d: any) => {
+                    const isClient = d.sender === 'user'; // Viene de WhatsApp (Externo)
+                    return {
+                        id: d.id,
+                        role: isClient ? 'client' : 'user', // user = operador/IA en la derecha
+                        sender: isClient ? t('chat.client_label') : (d.is_ai_generated ? `🤖 ${t('chat.ai_label')}` : `👤 ${t('chat.you')}`),
+                        is_ai: d.is_ai_generated,
+                        text: d.content,
+                        phone: d.phone || "",
+                        timestamp: d.timestamp,
+                        status: d.status || 'sent',
+                        confidence: d.confidence,
+                        metadata: typeof d.metadata_json === 'string'
+                            ? JSON.parse(d.metadata_json || '{}')
+                            : (d.metadata_json || {})
+                    };
+                });
+
+                console.log(`FETCH: Found ${formatted.length} messages for session ${convId}`);
+                setSessions(prev => {
+                    const exists = prev.find(s => Number(s.conversationId) === Number(id));
+                    if (!exists) {
+                        hydrationLock.current.delete(id); // Release lock so it can try again later if it disappeared
+                        return prev;
+                    }
+                    return prev.map(s =>
+                        Number(s.conversationId) === Number(id)
+                            ? { ...s, messages: formatted, isLoading: false }
+                            : s
+                    );
+                });
+            } else {
+                setSessions(prev => prev.map(s => Number(s.conversationId) === Number(id) ? { ...s, isLoading: false } : s));
+                hydrationLock.current.delete(id); // Release on failure
+            }
+        } catch (e) {
+            console.error("FETCH: Failed for", id, e);
+            setSessions(prev => prev.map(s => Number(s.conversationId) === Number(id) ? { ...s, isLoading: false } : s));
+            hydrationLock.current.delete(id);
+        } finally {
+            // Lock release is handled inside setSessions/catch to ensure we don't block forever on transient errors
         }
     }
 
+    useEffect(() => {
+        sessions.forEach(session => {
+            const id = Number(session.conversationId);
+            // ONLY trigger hydration if not already locked AND missing messages AND marked for load
+            if (!hydrationLock.current.has(id) && session.messages.length === 0 && session.isLoading === true) {
+                console.log(`FETCH: Lock & Trigger hydration for session ${id}`);
+                fetchMessages(id);
+            }
+        });
+    }, [sessions]);
+
     function handleSelectConversation(id: number, name: string, phone: string) {
-        setActiveConversationId(id);
-        setActiveClientName(name);
-        setActiveClientPhone(phone);
+        const convId = Number(id);
+        const existingIdx = sessions.findIndex(s => Number(s.conversationId) === convId);
+
+        if (existingIdx !== -1) {
+            setActiveConversationId(convId);
+            // Bring to front
+            maxZIndex.current += 1;
+            setSessions(prev => prev.map(s => s.conversationId === convId ? { ...s, layout: { ...s.layout!, zIndex: maxZIndex.current } } : s));
+        } else {
+            console.log("SESSION: Creating new canvas window for", convId);
+            maxZIndex.current += 1;
+            const newSession: ChatSession = {
+                conversationId: convId,
+                clientName: name,
+                clientPhone: phone,
+                messages: [],
+                isThinking: false,
+                isLoading: true,
+                _createdAt: Date.now(),
+                layout: {
+                    x: 50 + (sessions.length * 30),
+                    y: 50 + (sessions.length * 30),
+                    width: 450,
+                    height: 650,
+                    zIndex: maxZIndex.current
+                }
+            } as any;
+
+            setSessions(prev => [...prev, newSession]);
+            setActiveConversationId(convId);
+        }
     }
 
+    const startDrag = (e: React.MouseEvent, id: number) => {
+        if (layoutMode !== "canvas") return;
+        setDraggingId(id);
+        const session = sessions.find(s => s.conversationId === id);
+        if (session?.layout) {
+            dragOffset.current = {
+                x: e.clientX - session.layout.x,
+                y: e.clientY - session.layout.y
+            };
+            maxZIndex.current += 1;
+            setSessions(prev => prev.map(s => s.conversationId === id ? { ...s, layout: { ...s.layout!, zIndex: maxZIndex.current } } : s));
+        }
+    };
+
+    const startResize = (e: React.MouseEvent, id: number) => {
+        e.stopPropagation();
+        setResizingId(id);
+        maxZIndex.current += 1;
+        setSessions(prev => prev.map(s => s.conversationId === id ? { ...s, layout: { ...s.layout!, zIndex: maxZIndex.current } } : s));
+    };
+
+    useEffect(() => {
+        const handleGlobalMove = (e: MouseEvent) => {
+            if (draggingId !== null) {
+                setSessions(prev => prev.map(s => s.conversationId === draggingId ? {
+                    ...s,
+                    layout: { ...s.layout!, x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y }
+                } : s));
+            } else if (resizingId !== null) {
+                setSessions(prev => prev.map(s => s.conversationId === resizingId ? {
+                    ...s,
+                    layout: {
+                        ...s.layout!,
+                        width: Math.max(300, e.clientX - s.layout!.x),
+                        height: Math.max(400, e.clientY - s.layout!.y)
+                    }
+                } : s));
+            }
+        };
+
+        const handleGlobalUp = () => {
+            setDraggingId(null);
+            setResizingId(null);
+        };
+
+        if (draggingId !== null || resizingId !== null) {
+            window.addEventListener("mousemove", handleGlobalMove);
+            window.addEventListener("mouseup", handleGlobalUp);
+        }
+        return () => {
+            window.removeEventListener("mousemove", handleGlobalMove);
+            window.removeEventListener("mouseup", handleGlobalUp);
+        };
+    }, [draggingId, resizingId]);
+
     async function handleSimulateIncoming(phone: string, message: string) {
-        if (phone === activeClientPhone) setIsThinking(true);
+        if (phone === activeClientPhone) {
+            setSessions(prev => prev.map(s => s.conversationId === activeConversationId ? { ...s, isThinking: true } : s));
+        }
         await fetch("http://localhost:8000/whatsapp/webhook", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -136,35 +433,65 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
         });
     }
 
-    async function sendMessage() {
-        if (!input.trim() || !activeClientPhone) return;
-        const currentInput = input;
-        setInput("");
-        await fetch("http://localhost:8000/whatsapp/webhook", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sender: activeClientPhone, message: currentInput }),
-        });
-    }
+    const updateSessionMessages = useCallback((convId: number, updateFn: (msgs: any[]) => any[]) => {
+        setSessions(prev => prev.map(s => Number(s.conversationId) === Number(convId) ? { ...s, messages: updateFn(s.messages) } : s));
+    }, []);
 
-    async function approveMessage(id: number) {
-        setMessages(prev => prev.map(m => m.id === id ? { ...m, status: 'sent' } : m));
+    const sendMessage = useCallback(async (text: string, session: ChatSession) => {
+        if (!text.trim() || !session.conversationId) return;
+
+        const tempId = Date.now();
+        const optimisticMsg = {
+            id: tempId,
+            role: "user",
+            sender: t('chat.you'),
+            text: text,
+            phone: session.clientPhone,
+            timestamp: new Date().toISOString(),
+            status: "sending",
+            is_ai: false
+        };
+
+        updateSessionMessages(session.conversationId, msgs => [...msgs, optimisticMsg]);
+
+        try {
+            const res = await fetch(`http://localhost:8000/conversations/${session.conversationId}/messages`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ content: text }),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                updateSessionMessages(session.conversationId, msgs => msgs.map(m => m.id === tempId ? { ...m, id: data.id, status: 'sent' } : m));
+            } else {
+                throw new Error("Failed to send");
+            }
+        } catch (e) {
+            console.error("Send failed", e);
+            updateSessionMessages(session.conversationId, msgs => msgs.map(m => m.id === tempId ? { ...m, status: 'error' } : m));
+            alert("Failed to send message");
+        }
+    }, [t, updateSessionMessages]);
+
+    const approveMessage = useCallback(async (id: number, session: ChatSession) => {
+        updateSessionMessages(session.conversationId, msgs => msgs.map(m => m.id === id ? { ...m, status: 'sent' } : m));
         await fetch(`http://localhost:8000/conversations/messages/${id}/approve`, { method: "POST" });
-    }
+    }, [updateSessionMessages]);
 
-    async function rejectMessage(id: number) {
+    const rejectMessage = useCallback(async (id: number, session: ChatSession) => {
         if (!confirm(t('chat.alerts.confirm_reject'))) return;
-        setMessages(prev => prev.filter(m => m.id !== id));
-        await fetch(`http://localhost:8000/conversations/messages/${id}/reject`, { method: "POST" });
-    }
+        updateSessionMessages(session.conversationId, msgs => msgs.filter(m => m.id !== id));
+        fetch(`http://localhost:8000/conversations/messages/${id}/reject`, { method: "POST" });
+    }, [t, updateSessionMessages]);
 
-    async function deleteMessage(id: number) {
+    const deleteMessage = useCallback(async (id: number, session: ChatSession) => {
         if (!confirm(t('chat.alerts.confirm_delete'))) return;
-        setMessages(prev => prev.filter(m => m.id !== id));
-        await fetch(`http://localhost:8000/conversations/messages/${id}/reject`, { method: "POST" });
-    }
+        updateSessionMessages(session.conversationId, msgs => msgs.filter(m => m.id !== id));
+        fetch(`http://localhost:8000/conversations/messages/${id}/reject`, { method: "POST" });
+    }, [t, updateSessionMessages]);
 
-    async function editMessage(id: number, currentText: string) {
+    const editMessage = useCallback(async (id: number, currentText: string, session: ChatSession) => {
         const newText = prompt(t('chat.alerts.edit_prompt'), currentText);
         if (newText !== null && newText !== currentText) {
             await fetch(`http://localhost:8000/conversations/messages/${id}`, {
@@ -172,25 +499,26 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ content: newText })
             });
-            setMessages(prev => prev.map(m => m.id === id ? { ...m, text: newText } : m));
+            updateSessionMessages(session.conversationId, msgs => msgs.map(m => m.id === id ? { ...m, text: newText } : m));
         }
-    }
+    }, [t, updateSessionMessages]);
 
-    const { show } = useContextMenu({ id: MESSAGE_MENU_ID });
+    useEffect(() => {
+        const handleGlobalUp = () => {
+            setDraggingId(null);
+            setResizingId(null);
+        };
 
-    function handleContextMenu(event: React.MouseEvent, messageId: number, text: string) {
-        show({ event, props: { messageId, text } });
-    }
-
-    const handleItemClick = ({ id, props }: ItemParams) => {
-        if (id === "copy") navigator.clipboard.writeText(props.text);
-        if (id === "delete") deleteMessage(props.messageId);
-        if (id === "edit") editMessage(props.messageId, props.text);
-    };
+        if (draggingId !== null || resizingId !== null) {
+            window.addEventListener("mouseup", handleGlobalUp);
+        }
+        return () => {
+            window.removeEventListener("mouseup", handleGlobalUp);
+        };
+    }, [draggingId, resizingId]);
 
     return (
         <div className="flex h-full w-full bg-white dark:bg-gray-900 transition-colors duration-200 overflow-hidden">
-            {/* Security Alert Overlay */}
             {securityAlert?.show && (
                 <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] w-full max-w-lg px-4 animate-in fade-in slide-in-from-top-4">
                     <div className="bg-red-600 text-white p-4 rounded-3xl shadow-2xl flex items-center gap-4 border-2 border-red-400">
@@ -209,9 +537,14 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
 
             <Sidebar
                 onSelect={handleSelectConversation}
+                onPrefetch={(id) => {
+                    const exists = sessions.find(s => s.conversationId === id);
+                    if (!exists) fetchMessages(id);
+                }}
                 activeConversationId={activeConversationId}
                 onNewMessage={() => setIsSimulateModalOpen(true)}
                 onNavigate={onNavigate}
+                conversations={conversations}
             />
 
             <SimulateWebhookModal
@@ -220,131 +553,130 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
                 onSimulate={handleSimulateIncoming}
             />
 
-            <div className="flex-1 flex flex-col bg-slate-50 dark:bg-gray-950/50 relative">
-                <div className="h-16 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex items-center justify-between px-6">
-                    <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${activeConversationId ? "bg-green-500" : "bg-gray-300"}`}></div>
-                        <span className="font-bold text-gray-800 dark:text-gray-100">{activeClientName}</span>
-                    </div>
-                    <div className="flex gap-4 text-gray-400">
-                        <button onClick={() => setIsDarkMode(!isDarkMode)} className="hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
-                            {isDarkMode ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5" />}
+            <div className="flex-1 flex flex-col relative w-full h-full overflow-hidden">
+                <div className="h-14 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex items-center justify-end px-6 gap-4 sticky top-0 z-[60] shadow-sm transition-colors">
+                    <div className="flex gap-2 p-1 bg-gray-100 dark:bg-gray-900 rounded-2xl border dark:border-gray-700">
+                        <button
+                            onClick={() => setLayoutMode("focus")}
+                            className={`p-2 rounded-xl transition-all ${layoutMode === "focus" ? "bg-white dark:bg-gray-800 shadow-md text-blue-500 scale-105" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"}`}
+                            title="Focus Mode"
+                        >
+                            <Monitor className="w-5 h-5" />
                         </button>
-                        <Phone className="w-5 h-5 hover:text-gray-600 cursor-pointer" />
-                        <MoreVertical className="w-5 h-5 hover:text-gray-600 cursor-pointer" />
+                        <button
+                            onClick={() => setLayoutMode("canvas")}
+                            className={`p-2 rounded-xl transition-all ${layoutMode === "canvas" ? "bg-white dark:bg-gray-800 shadow-md text-blue-500 scale-105" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"}`}
+                            title="Whiteboard Canvas"
+                        >
+                            <LayoutGrid className="w-5 h-5" />
+                        </button>
+                        <div className="w-[1px] bg-gray-300 dark:bg-gray-700 mx-1"></div>
+                        <button
+                            onClick={() => setIsDarkMode(!isDarkMode)}
+                            className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-xl transition-all text-gray-500 hover:text-amber-500 dark:hover:text-blue-400"
+                        >
+                            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                        </button>
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {!activeConversationId && (
-                        <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-2">
-                            <p className="italic">{t('chat.select_client_to_view')}</p>
+                <div className="flex-1 overflow-auto relative bg-gray-50 dark:bg-gray-950 p-6 custom-scrollbar" ref={canvasRef}>
+                    {/* Whiteboard Grid Background */}
+                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none dark:opacity-[0.05]"
+                        style={{ backgroundImage: `radial-gradient(circle, currentColor 1px, transparent 1px)`, backgroundSize: '40px 40px' }}></div>
+
+                    {layoutMode === "focus" ? (
+                        <div className="h-full w-full animate-in fade-in duration-500">
+                            {activeSession ? (
+                                <div className="w-full h-full p-0">
+                                    <ChatWindow
+                                        {...activeSession}
+                                        onSendMessage={(txt) => sendMessage(txt, activeSession)}
+                                        onApprove={(id) => approveMessage(id, activeSession)}
+                                        onReject={(id) => rejectMessage(id, activeSession)}
+                                        onEdit={(id, txt) => editMessage(id, txt, activeSession)}
+                                        onDelete={(id) => deleteMessage(id, activeSession)}
+                                        onMaximize={() => setLayoutMode("canvas")}
+                                        onClose={() => {
+                                            setSessions(prev => prev.filter(s => s.conversationId !== activeSession.conversationId));
+                                            setActiveConversationId(null);
+                                        }}
+                                        isMaximized={true}
+                                    />
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full opacity-30 select-none">
+                                    <Layout className="w-20 h-20 mb-6" />
+                                    <h2 className="text-2xl font-black uppercase tracking-[0.5em]">{t('chat.select_client')}</h2>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="min-w-[3000px] min-h-[3000px] relative">
+                            {sessions.length === 0 && (
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center opacity-20 select-none">
+                                    <Grid2X2 className="w-32 h-32 mb-8" />
+                                    <h2 className="text-4xl font-black uppercase tracking-[1em]">{t('chat.select_client')}</h2>
+                                </div>
+                            )}
+
+                            {sessions.map((session) => (
+                                <div
+                                    key={session.conversationId}
+                                    className={`absolute transition-shadow duration-200 ${draggingId === session.conversationId ? "shadow-2xl ring-2 ring-indigo-500/50" : "shadow-xl"}`}
+                                    style={{
+                                        left: session.layout?.x || 0,
+                                        top: session.layout?.y || 0,
+                                        width: session.layout?.width || 450,
+                                        height: session.layout?.height || 650,
+                                        zIndex: session.layout?.zIndex || 10,
+                                        cursor: draggingId === session.conversationId ? 'grabbing' : 'default'
+                                    }}
+                                    onMouseDown={() => {
+                                        if (activeConversationId !== session.conversationId) setActiveConversationId(session.conversationId);
+                                    }}
+                                >
+                                    <ChatWindow
+                                        {...session}
+                                        onSendMessage={(txt) => sendMessage(txt, session)}
+                                        onApprove={(id) => approveMessage(id, session)}
+                                        onReject={(id) => rejectMessage(id, session)}
+                                        onEdit={(id, txt) => editMessage(id, txt, session)}
+                                        onDelete={(id) => deleteMessage(id, session)}
+                                        onMaximize={() => {
+                                            setActiveConversationId(session.conversationId);
+                                            setLayoutMode("focus");
+                                        }}
+                                        onClose={() => {
+                                            setSessions(prev => prev.filter(s => s.conversationId !== session.conversationId));
+                                            if (activeConversationId === session.conversationId) setActiveConversationId(null);
+                                        }}
+                                        isMaximized={false}
+                                        isLoading={session.isLoading}
+                                        // Custom Props for Canvas
+                                        canDrag={true}
+                                        onDragStart={(e: any) => startDrag(e, session.conversationId)}
+                                        onResizeStart={(e: any) => startResize(e, session.conversationId)}
+                                    />
+                                </div>
+                            ))}
                         </div>
                     )}
-
-                    {messages.map((m, i) => (
-                        <div key={i} className={`flex ${m.role === "agent" ? "justify-end" : "justify-start"}`}>
-                            <div className={`p-4 rounded-3xl max-w-md shadow-sm relative group ${m.status === 'pending'
-                                    ? "bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-400 rounded-br-none"
-                                    : m.role === "agent"
-                                        ? "bg-blue-600/10 dark:bg-blue-500/20 text-blue-800 dark:text-blue-100 rounded-br-none border border-blue-200 dark:border-blue-800"
-                                        : "bg-white dark:bg-gray-800 dark:text-gray-100 border dark:border-gray-700 rounded-bl-none"
-                                }`}
-                                onContextMenu={(e) => handleContextMenu(e, m.id, m.text)}
-                            >
-                                <div className="flex justify-between items-center mb-1 gap-4">
-                                    <span className={`text-[10px] font-black uppercase tracking-widest opacity-50 ${m.role === "agent" ? "text-blue-600" : "text-gray-400"}`}>
-                                        {m.role === "agent" ? t('chat.ai_agent') : t('chat.client')}
-                                    </span>
-                                    {m.metadata?.intent === "Violation" && (
-                                        <span className="bg-red-600 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
-                                            MONOLITHIC BLOCK
-                                        </span>
-                                    )}
-                                </div>
-
-                                {m.status === 'pending' && (
-                                    <div className="mb-2 text-xs font-bold text-amber-600 dark:text-amber-400 flex justify-between items-center bg-amber-100/50 dark:bg-amber-900/30 px-2 py-1 rounded-lg">
-                                        <span>{t('chat.ai_suggestion')}</span>
-                                        <span className="text-[10px] opacity-70 uppercase tracking-tighter">Review required</span>
-                                    </div>
-                                )}
-
-                                <p className="leading-relaxed text-sm whitespace-pre-wrap font-medium">{m.text}</p>
-
-                                {m.status === 'pending' && (
-                                    <div className="mt-3 flex gap-2 border-t border-amber-200 dark:border-amber-800 pt-2">
-                                        <button onClick={() => approveMessage(m.id)} className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs py-1.5 rounded-xl transition-all font-bold">Approve</button>
-                                        <button onClick={() => editMessage(m.id, m.text)} className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs py-1.5 rounded-xl font-bold">Edit</button>
-                                        <button onClick={() => rejectMessage(m.id)} className="flex-1 bg-red-100 dark:bg-red-900/30 text-red-600 text-xs py-1.5 rounded-xl font-bold">Reject</button>
-                                    </div>
-                                )}
-
-                                <div className={`text-[9px] mt-2 opacity-60 flex items-center gap-1 font-mono ${m.role === "agent" ? "justify-end" : "justify-start"}`}>
-                                    {m.timestamp ? new Date(m.timestamp).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' }) : "Just now"}
-                                    {m.status === 'pending' && <span className="animate-spin text-amber-500">⏳</span>}
-                                    {m.metadata?.domain && <span className="ml-2 px-1 bg-gray-100 dark:bg-gray-950 rounded uppercase font-black text-[7px]">{m.metadata.domain}</span>}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-
-                    {isThinking && (
-                        <div className="flex justify-start">
-                            <div className="p-4 rounded-3xl rounded-bl-none bg-white dark:bg-gray-800 border dark:border-gray-700 flex items-center gap-2 shadow-sm">
-                                <span className="flex gap-1.5">
-                                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce"></span>
-                                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                                </span>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{t('chat.thinking')}</span>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="p-4 bg-white dark:bg-gray-800 border-t dark:border-gray-700">
-                    <div className="flex gap-2 p-1 bg-gray-50 dark:bg-gray-900 rounded-2xl border dark:border-gray-700">
-                        <input
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                            placeholder={activeConversationId ? t('chat.type_to_simulate') : t('chat.select_first')}
-                            disabled={!activeConversationId}
-                            className="flex-1 bg-transparent dark:text-white border-0 px-4 py-2 focus:ring-0 outline-none text-sm disabled:opacity-50"
-                        />
-                        <button onClick={sendMessage} disabled={!activeConversationId} className="bg-blue-600 text-white p-2.5 rounded-xl transition-all shadow-lg shadow-blue-500/10 disabled:opacity-50">
-                            <Send className="w-5 h-5" />
-                        </button>
-                    </div>
                 </div>
             </div>
 
             <InfoPanel
                 clientName={activeClientName}
                 clientPhone={activeClientPhone}
-                currentAction={(() => {
-                    const pendingMsg = messages.find(m => m.status === 'pending');
+                currentAction={activeSession ? (() => {
+                    const pendingMsg = activeSession.messages.find(m => m.status === 'pending');
                     return pendingMsg ? {
                         intent: pendingMsg.metadata?.intent || "Unknown",
                         reasoning: pendingMsg.metadata?.reasoning || "No reasoning provided.",
                         confidence: pendingMsg.confidence || 0
                     } : null;
-                })()}
+                })() : null}
             />
-
-            <Menu id={MESSAGE_MENU_ID} className="dark:bg-gray-900 dark:border-gray-800 shadow-2xl rounded-xl">
-                <Item id="copy" onClick={handleItemClick} className="text-xs font-bold dark:text-gray-300">
-                    <Copy className="w-4 h-4 mr-2 text-indigo-500" /> {t('common.copy_text')}
-                </Item>
-                <Item id="edit" onClick={handleItemClick} className="text-xs font-bold dark:text-gray-300">
-                    <Edit2 className="w-4 h-4 mr-2 text-blue-500" /> {t('common.edit_message')}
-                </Item>
-                <Separator />
-                <Item id="delete" onClick={handleItemClick} className="text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10">
-                    <Trash2 className="w-4 h-4 mr-2" /> {t('common.delete_message')}
-                </Item>
-            </Menu>
         </div>
     );
 }

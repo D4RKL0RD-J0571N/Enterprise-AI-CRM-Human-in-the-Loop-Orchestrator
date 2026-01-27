@@ -152,7 +152,10 @@
         "type_to_simulate": "Type a message to simulate a client...",
         "select_first": "⬅ Select a client first to start chatting",
         "client": "Client",
-        "ai_agent": "AI Assistant",
+        "ai_label": "AI Assistant",
+        "client_label": "Client",
+        "ai_suggestion_label": "AI (Suggestion)",
+        "you": "You",
         "toggle_theme": "Toggle Theme",
         "alerts": {
             "select_first_alert": "Please select a conversation first or use '+' to simulate a new client.",

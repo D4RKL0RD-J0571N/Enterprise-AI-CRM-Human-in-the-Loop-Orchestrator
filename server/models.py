@@ -77,6 +77,16 @@ class AIConfig(Base):
     primary_color = Column(String, default="#2563eb") # Tailwind blue-600 default
     ui_density = Column(String, default="comfortable") # "compact" or "comfortable"
     
+    # Secrets & Integrations (Added v8)
+    openai_api_key = Column(String, nullable=True) # Defaults to None (use env or empty)
+    openai_api_base = Column(String, default="http://localhost:1234/v1")
+    whatsapp_api_token = Column(String, nullable=True)
+    whatsapp_verify_token = Column(String, nullable=True)
+    
+    # Global Settings
+    timezone = Column(String, default="UTC") # e.g. "America/Costa_Rica"
+    workspace_config = Column(String, default="{}") # JSON storage for UI layout preferences
+    
     is_active = Column(Boolean, default=True)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 

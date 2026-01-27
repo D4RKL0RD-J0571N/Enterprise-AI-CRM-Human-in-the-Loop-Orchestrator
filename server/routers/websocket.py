@@ -1,9 +1,16 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import List
+import time
+from logger import setup_logger
+
+logger = setup_logger("websocket")
 
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
+        self.msg_count = 0
+        self.last_reset = time.time()
+        self.RATE_LIMIT = 100 # msgs per second
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -13,6 +20,21 @@ class ConnectionManager:
         self.active_connections.remove(websocket)
 
     async def broadcast(self, message: str):
+        # Rolling window rate limiter
+        now = time.time()
+        if now - self.last_reset > 1.0:
+            self.msg_count = 0
+            self.last_reset = now
+            
+        self.msg_count += 1
+        
+        if self.msg_count > self.RATE_LIMIT:
+            # Shed load - drop message if rate exceeded to protect UI
+            # In a real system we might buffer or prioritize critical alerts
+            if self.msg_count % 10 == 0: # Log every 10th dropped message to avoid spamming logs
+                 logger.warning(f"Rate limit exceeded ({self.msg_count}/{self.RATE_LIMIT}). Dropping message.")
+            return
+
         for connection in self.active_connections:
             await connection.send_text(message)
 

@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
-import { Shield, Brain, Plus, X } from "lucide-react";
+import { Shield, Brain, Plus, X, RefreshCw } from "lucide-react";
 import type { AIConfig } from "../../../types/admin";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Props {
     config: AIConfig;
@@ -11,6 +11,38 @@ interface Props {
 export const AdvancedTab = ({ config, setConfig }: Props) => {
     const { t } = useTranslation();
     const [newIntent, setNewIntent] = useState({ keywords: "", intent: "" });
+    const [availableModels, setAvailableModels] = useState<string[]>([]);
+    const [isLoadingModels, setIsLoadingModels] = useState(false);
+    const [availableTimezones, setAvailableTimezones] = useState<string[]>([]);
+
+    // Fetch Timezones
+    useEffect(() => {
+        fetch("http://localhost:8000/admin/timezones")
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data)) setAvailableTimezones(data);
+            })
+            .catch(err => console.error("Failed to fetch timezones", err));
+    }, []);
+
+    const fetchModels = async () => {
+        setIsLoadingModels(true);
+        try {
+            const res = await fetch("http://localhost:8000/admin/models");
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                setAvailableModels(data);
+            }
+        } catch (e) {
+            console.error("Failed to fetch models", e);
+        }
+        setIsLoadingModels(false);
+    };
+
+    useEffect(() => {
+        // Initial fetch if empty
+        if (availableModels.length === 0) fetchModels();
+    }, []);
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -116,18 +148,39 @@ export const AdvancedTab = ({ config, setConfig }: Props) => {
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('admin.fields.preferred_model')}</label>
+                        <div className="flex justify-between items-center">
+                            <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('admin.fields.preferred_model')}</label>
+                            <button onClick={fetchModels} className="text-[10px] flex items-center gap-1 text-indigo-500 hover:underline">
+                                <RefreshCw className={`w-3 h-3 ${isLoadingModels ? 'animate-spin' : ''}`} /> Refresh
+                            </button>
+                        </div>
                         <select
                             value={config.preferred_model || "gpt-4-turbo"}
                             onChange={(e) => setConfig({ ...config, preferred_model: e.target.value })}
                             className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border-none focus:ring-2 focus:ring-indigo-500 dark:text-white text-sm"
                         >
-                            <option value="gpt-4-turbo">GPT-4 Turbo (Performance)</option>
-                            <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Speed)</option>
-                            <option value="lm-studio">Local LLM (LM Studio)</option>
-                            <option value="claude-3-opus">Claude 3 Opus (Accuracy)</option>
+                            <option value="gpt-4-turbo">GPT-4 Turbo (Default)</option>
+                            <option value="lm-studio">Locally Hosted (Override)</option>
+                            {availableModels.map(m => (
+                                <option key={m} value={m}>{m}</option>
+                            ))}
                         </select>
                         <p className="text-[10px] text-gray-500 italic mt-1">{t('admin.fields.model_hint')}</p>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('admin.fields.timezone') || "Timezone"}</label>
+                        <select
+                            value={config.timezone || "UTC"}
+                            onChange={(e) => setConfig({ ...config, timezone: e.target.value })}
+                            className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border-none focus:ring-2 focus:ring-indigo-500 dark:text-white text-sm"
+                        >
+                            <option value="UTC">UTC (Universal)</option>
+                            {availableTimezones.map(tz => (
+                                <option key={tz} value={tz}>{tz}</option>
+                            ))}
+                        </select>
+                        <p className="text-[10px] text-gray-500 italic mt-1">System logs will use this timezone.</p>
                     </div>
                 </div>
             </div>

@@ -164,7 +164,10 @@
         "type_to_simulate": "Escriba un mensaje para simular un cliente...",
         "select_first": "⬅ Seleccione un cliente primero para empezar a chatear",
         "client": "Cliente",
-        "ai_agent": "Asistente IA",
+        "ai_label": "Asistente IA",
+        "client_label": "Cliente",
+        "ai_suggestion_label": "IA (Sugerencia)",
+        "you": "Tú",
         "toggle_theme": "Cambiar Tema",
         "alerts": {
             "select_first_alert": "Por favor, seleccione una conversación primero o use el botón '+' para simular un nuevo cliente.",

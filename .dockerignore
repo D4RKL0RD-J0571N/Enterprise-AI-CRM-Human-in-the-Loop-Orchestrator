@@ -1,0 +1,12 @@
+node_modules
+.venv
+data
+__pycache__
+*.pyc
+.env
+dist
+build
+.git
+.gitignore
+.vscode
+.gemini

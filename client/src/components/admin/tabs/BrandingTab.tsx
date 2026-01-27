@@ -1,4 +1,4 @@
-import { useTranslation } from "react-i18next";
+import { useEffect } from "react";
 import { Palette, Image as ImageIcon, Layout, CheckCircle, Shield } from "lucide-react";
 import type { AIConfig } from "../../../types/admin";
 
@@ -8,7 +8,14 @@ interface Props {
 }
 
 export const BrandingTab = ({ config, setConfig }: Props) => {
-    // useTranslation is imported but t is currently unused.
+    // const { t } = useTranslation(); // useTranslation is imported but t is currently unused.
+
+    // Force real-time CSS variable update for Preview
+    useEffect(() => {
+        if (config.primary_color) {
+            document.documentElement.style.setProperty('--primary-color', config.primary_color);
+        }
+    }, [config.primary_color]);
 
     const colors = [
         { name: "SaaS Blue", value: "#2563eb" },
@@ -112,7 +119,12 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
 
             {/* Premium Preview Card */}
             <div className="bg-white dark:bg-gray-950 p-8 rounded-3xl border dark:border-gray-800 shadow-2xl relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-indigo-500/10 to-transparent blur-3xl pointer-events-none"></div>
+                <div
+                    className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-transparent to-transparent blur-3xl pointer-events-none"
+                    style={{
+                        background: `linear-gradient(to bottom right, ${config.primary_color}1a, transparent)`
+                    }}
+                ></div>
                 <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6">Vista Previa de Marca</h3>
                 <div className="flex items-center gap-6">
                     <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center p-2 shadow-inner">

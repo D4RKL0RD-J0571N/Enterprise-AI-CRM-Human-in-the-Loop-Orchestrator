@@ -7,6 +7,10 @@ from typing import List
 import json
 from logger import setup_logger
 from services.ai_agent import AIAgent
+try:
+    import zoneinfo
+except ImportError:
+    from backports import zoneinfo # Fallback for older python if needed, but 3.9+ has it
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 logger = setup_logger("admin")
@@ -32,6 +36,15 @@ class AIConfigRequest(BaseModel):
     logo_url: Optional[str] = None
     primary_color: str = "#2563eb"
     ui_density: str = "comfortable"
+    # Secrets
+    openai_api_key: Optional[str] = None
+    openai_api_base: Optional[str] = "http://localhost:1234/v1"
+    whatsapp_api_token: Optional[str] = None
+    whatsapp_api_token: Optional[str] = None
+    whatsapp_verify_token: Optional[str] = None
+    whatsapp_verify_token: Optional[str] = None
+    timezone: str = "UTC"
+    workspace_config: str = "{}"
 
 @router.get("/config")
 def get_ai_config(db: Session = Depends(get_db)):
@@ -57,7 +70,15 @@ def get_ai_config(db: Session = Depends(get_db)):
         "preferred_model": getattr(config, 'preferred_model', 'gpt-4-turbo'),
         "logo_url": getattr(config, 'logo_url', None),
         "primary_color": getattr(config, 'primary_color', '#2563eb'),
-        "ui_density": getattr(config, 'ui_density', 'comfortable')
+        "ui_density": getattr(config, 'ui_density', 'comfortable'),
+        # Secrets (Masked for security in real app, but explicit here for admin)
+        "openai_api_base": getattr(config, 'openai_api_base', 'http://localhost:1234/v1'),
+        "has_openai_key": bool(getattr(config, 'openai_api_key', None)),
+        "has_whatsapp_token": bool(getattr(config, 'whatsapp_api_token', None)),
+        "has_openai_key": bool(getattr(config, 'openai_api_key', None)),
+        "has_whatsapp_token": bool(getattr(config, 'whatsapp_api_token', None)),
+        "timezone": getattr(config, 'timezone', 'UTC'),
+        "workspace_config": getattr(config, 'workspace_config', '{}')
     }
 
 @router.post("/config")
@@ -84,6 +105,21 @@ def update_ai_config(req: AIConfigRequest, db: Session = Depends(get_db)):
     config.logo_url = req.logo_url
     config.primary_color = req.primary_color
     config.ui_density = req.ui_density
+    
+    # Secrets Update (Only if provided, to avoid clearing on empty)
+    if req.openai_api_key:
+        config.openai_api_key = req.openai_api_key
+    if req.openai_api_base:
+        config.openai_api_base = req.openai_api_base
+    if req.whatsapp_api_token:
+        config.whatsapp_api_token = req.whatsapp_api_token
+    if req.whatsapp_api_token:
+        config.whatsapp_api_token = req.whatsapp_api_token
+    if req.whatsapp_verify_token:
+        config.whatsapp_verify_token = req.whatsapp_verify_token
+        
+    config.timezone = req.timezone
+    config.workspace_config = req.workspace_config
     
     db.commit()
     
@@ -198,7 +234,23 @@ def toggle_snapshot_lock(snapshot_id: int, db: Session = Depends(get_db)):
     
     snapshot.is_locked = not getattr(snapshot, "is_locked", False)
     db.commit()
+    snapshot.is_locked = not getattr(snapshot, "is_locked", False)
+    db.commit()
     return {"status": "success", "is_locked": snapshot.is_locked}
+
+class WorkspaceConfigRequest(BaseModel):
+    config: str
+
+@router.post("/workspace")
+def save_workspace_config(req: WorkspaceConfigRequest, db: Session = Depends(get_db)):
+    """Save persistent UI layout preferences."""
+    config = db.query(AIConfig).filter(AIConfig.is_active == True).first()
+    if not config:
+        raise HTTPException(status_code=404, detail="Config not found")
+        
+    config.workspace_config = req.config
+    db.commit()
+    return {"status": "success"}
 
 class AITestRequest(BaseModel):
     message: str
@@ -311,3 +363,12 @@ def list_security_audits(db: Session = Depends(get_db)):
             obj["triggered_keywords"] = []
         result.append(obj)
     return result
+
+@router.get("/timezones")
+def list_timezones():
+    """Fetch all available IANA timezones from the system."""
+    try:
+        return sorted(list(zoneinfo.available_timezones()))
+    except Exception as e:
+        logger.error(f"Error fetching timezones: {e}")
+        return ["UTC", "America/New_York", "Europe/London"] # Fallback

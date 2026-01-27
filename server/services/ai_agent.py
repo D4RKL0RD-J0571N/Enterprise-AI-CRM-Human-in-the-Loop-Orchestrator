@@ -8,30 +8,20 @@ from sqlalchemy.orm import Session
 from logger import setup_logger
 from models import AIConfig, AIDataset, Message, SecurityAudit
 from routers.websocket import manager
+from guardrail.engine import GuardrailEngine
 
 logger = setup_logger("ai_agent")
 
-# Configure OpenAI to use Local LLM (LM Studio)
-openai.api_key = os.getenv("OPENAI_API_KEY", "lm-studio")
-openai.api_base = os.getenv("OPENAI_API_BASE", "http://localhost:1234/v1")
+# OpenAI configuration is now dynamic per request
+# openai.api_key = os.getenv("OPENAI_API_KEY", "lm-studio")
+# openai.api_base = os.getenv("OPENAI_API_BASE", "http://localhost:1234/v1")
 
 class AIAgent:
     def __init__(self):
         self.context = {}
     
-    # HARD-CODED SECURITY TRIGGERS (Never touch business topics)
-    SECURITY_VIOLATION_KEYWORDS = [
-        "huelga", "politic", "activismo", "manifestaci", "gobierno", "voto", "elección",
-        "religi", "gas lacrim", "manifestante", "protesta", "marcha", "disturbio",
-        # Add abuse/hate speech patterns
-        "maldito", "idiota", "estúpido", "pendejo", "hijo de puta",
-        # Medical/Emergencies
-        "médico", "herida", "sangre", "hospital", "ambulancia"
-    ]
-    
-    # Legal/Medical Hard Boundaries
-    LEGAL_KEYWORDS = ["ley", "legal", "abogado", "derecho", "demanda", "juicio"]
-    MEDICAL_KEYWORDS = ["diagnóstico", "medicina", "tratamiento médico", "prescripción"]
+    def __init__(self):
+        self.context = {}
 
     def _get_active_config(self, db):
         config = db.query(AIConfig).filter(AIConfig.is_active == True).first()
@@ -63,40 +53,13 @@ class AIAgent:
             "intent_rules": json.loads(config.intent_rules_json),
             "fallback_message": config.fallback_message,
             "preferred_model": config.preferred_model,
+            "openai_api_key": config.openai_api_key,
+            "openai_api_base": config.openai_api_base,
+            "whatsapp_api_token": config.whatsapp_api_token,
             "is_configured": True
         }
 
-    def _classify_trigger_type(self, user_message, forbidden_topics):
-        """
-        Classify whether triggered keywords are Security Violations or just Out-of-Scope business topics.
-        
-        Returns:
-            - "security_violation": Politics, hate speech, legal advice, etc.
-            - "out_of_scope": Business products/services we don't offer (pizza, restaurants, etc.)
-            - None: No violation detected
-        """
-        user_msg_lower = user_message.lower()
-        
-        # 1. Security Check (Highest Priority)
-        security_triggers = [kw for kw in self.SECURITY_VIOLATION_KEYWORDS if kw.lower() in user_msg_lower]
-        if security_triggers:
-            return "security_violation", security_triggers
-        
-        # 2. Legal/Medical Check (Also Security)
-        legal_triggers = [kw for kw in self.LEGAL_KEYWORDS if kw.lower() in user_msg_lower]
-        if legal_triggers:
-            return "legal_violation", legal_triggers
-        
-        medical_triggers = [kw for kw in self.MEDICAL_KEYWORDS if kw.lower() in user_msg_lower]
-        if medical_triggers:
-            return "medical_violation", medical_triggers
-        
-        # 3. Business Boundary Check (Out of Scope)
-        business_triggers = [topic for topic in forbidden_topics if topic.lower() in user_msg_lower]
-        if business_triggers:
-            return "out_of_scope", business_triggers
-        
-        return None, []
+
 
     def _build_intent_mapping_context(self, intent_rules):
         """
@@ -137,8 +100,11 @@ class AIAgent:
             }
         
         # 2. Pre-Scan: Classify Trigger Type
+        # 2. Pre-Scan: Classify Trigger Type
         forbidden_topics = config.get("forbidden_topics", [])
-        trigger_type, triggered_keywords = self._classify_trigger_type(user_message, forbidden_topics)
+        guardrail_result = GuardrailEngine.prescan_message(user_message, forbidden_topics)
+        trigger_type = guardrail_result.classification if guardrail_result.classification != "in_scope" else None
+        triggered_keywords = guardrail_result.triggered_keywords
         
         # 3. Construct Knowledge Base Context
         from models import AIDataset
@@ -169,10 +135,13 @@ class AIAgent:
                 f"IMPORTANT: These are BUSINESS boundaries, NOT security violations. Be friendly.\n"
             )
         
-        # 6. Language & Tone
+        # 6. Language & Tone & Timezone
         lang_code = config.get("language_code", "es-CR")
         tone = config.get("tone", "friendly, concise, and professional")
-        lang_instruction = f"Respond in {lang_code}. Tone: {tone}."
+        timezone = config.get("timezone", "UTC")
+        local_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        lang_instruction = f"Respond in {lang_code}. Tone: {tone}. Current Time: {local_time} ({timezone})."
         
         # 7. Construct System Prompt (REFACTORED)
         rules_list = config.get("rules", [])
@@ -191,14 +160,16 @@ class AIAgent:
             f"### CATEGORIZATION FRAMEWORK:\n"
             f"You must classify every user message into ONE of these categories:\n\n"
             f"1. **Commercial/Logistics** (AUTHORIZED):\n"
-            f"   - Questions about products, prices, orders, delivery, payment, hours, location\n"
-            f"   - Use Knowledge Base to answer. If info not in KB, set `is_out_of_knowledge: true`\n"
-            f"   - If topic is in Business Scope Boundaries list (forbidden_topics), this is NOT a violation—just politely say we don't offer it\n\n"
+            f"   - Questions about products, prices, orders, delivery, payment, hours, location.\n"
+            f"   - Use Knowledge Base to answer. If info not in KB, set `is_out_of_knowledge: true`.\n"
+            f"   - If topic is in Business Scope Boundaries list (forbidden_topics), this is NOT a violation—just politely say we don't offer it.\n"
+            f"   - **CX RULE**: If sentiment is NEGATIVE (Complaint, Delay, Issue) -> **DO NOT** ask to buy/order. Focus 100% on resolution.\n"
+            f"   - **CX RULE**: If Intent is 'Missing Order' -> Ask for Order Number immediately.\n\n"
             f"2. **Out of Scope - Business Boundary** (FRIENDLY REDIRECT):\n"
-            f"   - Customer asks about products/services we don't offer (e.g., pizza, restaurants)\n"
-            f"   - Domain: 'Commercial/Logistics' (still business-related)\n"
-            f"   - Set `is_out_of_knowledge: true` and `classification: 'out_of_scope'`\n"
-            f"   - Response: Friendly, apologetic, redirect to what we DO offer\n"
+            f"   - Customer asks about products/services we don't offer (e.g., pizza, restaurants).\n"
+            f"   - Domain: 'Commercial/Logistics' (still business-related).\n"
+            f"   - Set `is_out_of_knowledge: true` and `classification: 'out_of_scope'`.\n"
+            f"   - Response: Friendly, apologetic, redirect to what we DO offer.\n"
             f"   - Example: 'Lo siento, no vendemos pizza. Te invito a ver nuestros productos de café en el catálogo.'\n\n"
             f"3. **Security Violation** (BLOCK IMMEDIATELY):\n"
             f"   - Politics, protests, religion, hate speech, insults, abuse\n"
@@ -210,7 +181,12 @@ class AIAgent:
             f"   - Example: 'No emitimos comentarios sobre temas sociales o políticos.'\n\n"
             f"### CRITICAL DISTINCTION:\n"
             f"- 'Pizza' = Out of Scope (friendly) ≠ 'Protest' = Security Violation (cold)\n"
-            f"- Use `classification` field to distinguish these\n\n"
+            f"- 'Pizza' = Out of Scope (friendly) ≠ 'Protest' = Security Violation (cold)\n"
+            f"- Use `classification` field to distinguish these.\n\n"
+            f"### CLOSING PROTOCOL:\n"
+            f"- **Neutral**: 'How else can I help?' (Use for support/complaints)\n"
+            f"- **Sales**: 'Would you like to order?' (ONLY for positive buying signals)\n"
+            f"- **NEVER** use aggressive closing on negative sentiment.\n\n"
             f"### RESPONSE FORMAT (JSON):\n"
             f"{{\n"
             f'  "reply": "Your response in {lang_code}",\n'
@@ -238,13 +214,22 @@ class AIAgent:
             "metadata": {"intent": "error", "reasoning": "Exception occurred"}
         }
 
-        if not openai.api_key:
-            logger.warning("OpenAI API Key is missing")
-            return {
-                "content": "AI Agent: OpenAI API Key not configured.", 
-                "confidence": 0, 
-                "metadata": {"intent": "system_error", "reasoning": "Missing API Key"}
-            }
+        if not config.get("openai_api_key") and not openai.api_key:
+            # Fallback to env var if strictly needed, or fail
+            # For this systme, we prefer DB config
+            if not os.getenv("OPENAI_API_KEY") and config.get("openai_api_base") != "lm-studio": # Allow lm-studio without key
+                logger.warning("OpenAI API Key is missing")
+                return {
+                    "content": "AI Agent: OpenAI API Key not configured.", 
+                    "confidence": 0, 
+                    "metadata": {"intent": "system_error", "reasoning": "Missing API Key"}
+                }
+        
+        # Apply Configuration
+        if config.get("openai_api_key"):
+            openai.api_key = config["openai_api_key"]
+        if config.get("openai_api_base"):
+            openai.api_base = config["openai_api_base"]
 
         try:
             # 9. LLM Call
@@ -346,6 +331,29 @@ class AIAgent:
             
             if latency_ms > 8000:
                 audit_status = "Latency_Violation"
+
+            # Prometheus Metrics Recording
+            from services.metrics import (
+                AI_REQUESTS_TOTAL, SECURITY_VIOLATIONS_TOTAL, 
+                REQUEST_LATENCY_MS, TOKENS_USED_TOTAL, MANUAL_REVIEWS_TOTAL
+            )
+            
+            AI_REQUESTS_TOTAL.labels(
+                status=audit_status, 
+                domain=domain, 
+                classification=classification
+            ).inc()
+            
+            REQUEST_LATENCY_MS.observe(latency_ms)
+            
+            if tokens_used > 0:
+                TOKENS_USED_TOTAL.labels(model=preferred_model).inc()
+            
+            if intent == "Security_Violation":
+                SECURITY_VIOLATIONS_TOTAL.labels(type=classification).inc()
+                
+            if confidence_score < config.get("auto_respond_threshold", 85) and audit_status != "Blocked":
+                 MANUAL_REVIEWS_TOTAL.inc()
 
             if db:
                 audit = SecurityAudit(

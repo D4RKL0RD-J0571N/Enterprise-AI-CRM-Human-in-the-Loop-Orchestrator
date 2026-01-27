@@ -16,6 +16,13 @@ export interface AIConfig {
     logo_url: string | null;
     primary_color: string;
     ui_density: 'compact' | 'comfortable';
+
+    // Secrets (Optional)
+    openai_api_key?: string;
+    openai_api_base?: string;
+    whatsapp_api_token?: string;
+    whatsapp_verify_token?: string;
+    timezone: string;
 }
 
 export interface SecurityAudit {
