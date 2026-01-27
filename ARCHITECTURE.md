@@ -133,19 +133,19 @@ sequenceDiagram
 ```mermaid
 graph TD
     subgraph "External Interfaces"
-        A[WhatsApp Webhook]
-        H[HITL Reviewer Dashboard]
+        A["WhatsApp Webhook"]
+        H["HITL Reviewer Dashboard"]
     end
 
     subgraph "Backend (FastAPI)"
-        G[Guardrail Engine]
-        L[LLM Orchestrator]
-        WSM[WebSocket Manager]
-        D[(SecurityAudit DB)]
+        G["Guardrail Engine"]
+        L["LLM Orchestrator"]
+        WSM["WebSocket Manager"]
+        D[("SecurityAudit DB")]
     end
 
     subgraph "AI Layer"
-        LM[Local LLM (LM Studio / OpenAI API)]
+        LM["Local LLM (LM Studio / OpenAI API)"]
     end
 
     A --> G
