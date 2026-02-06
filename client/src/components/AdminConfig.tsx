@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, CheckCircle, Shield, Brain, Sliders, Send, Database, Archive, BarChart2, Eye, Palette, Lock, Globe, Settings, ChevronRight } from "lucide-react";
+import { Save, CheckCircle, Shield, Brain, Sliders, Send, Database, Archive, BarChart2, Eye, Palette, Lock, Globe, Settings, ChevronRight, Key } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { API_ENDPOINTS } from "../lib/api";
@@ -16,7 +16,8 @@ import {
     SandboxTab,
     AuditTab,
     BrandingTab,
-    SecretsTab
+    SecretsTab,
+    LicenseTab
 } from "./admin/tabs";
 
 interface AdminConfigProps {
@@ -409,6 +410,7 @@ export default function AdminConfig({ onSave }: AdminConfigProps) {
             label: t('admin.sections.security'),
             icon: Lock,
             items: [
+                { id: "license", label: "License", icon: Key }, // New Item
                 { id: "secrets", label: t('admin.tabs.secrets'), icon: Lock },
                 { id: "audit", label: t('admin.tabs.audit'), icon: Eye },
             ]
@@ -570,6 +572,7 @@ export default function AdminConfig({ onSave }: AdminConfigProps) {
                         )}
 
                         {activeTab === "secrets" && <SecretsTab config={config} setConfig={setConfig} />}
+                        {activeTab === "license" && <LicenseTab />}
                         {activeTab === "audit" && (
                             <AuditTab audits={audits} auditLogs={auditLogs} refreshAudits={fetchAudits} />
                         )}  {activeTab === "snapshots" && (
