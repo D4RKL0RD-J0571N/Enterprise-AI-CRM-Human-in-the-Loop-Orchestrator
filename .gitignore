@@ -26,3 +26,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+
+# Security
+*.pem
+server/keys/
