@@ -1,5 +1,5 @@
-
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { API_ENDPOINTS } from "../../../lib/api";
 import { useAuth } from "../../../context/AuthContext";
 import { Key, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
@@ -13,6 +13,7 @@ interface LicensePayload {
 }
 
 export function LicenseTab() {
+    const { t } = useTranslation();
     const { token } = useAuth();
 
     const [status, setStatus] = useState<"loading" | "active" | "missing" | "invalid">("loading");
@@ -60,7 +61,7 @@ export function LicenseTab() {
 
             if (!res.ok) throw new Error(data.detail || "Failed to activate license");
 
-            setMessage("License activated successfully!");
+            setMessage(t('admin.license.success'));
             setPayload(data.payload);
             setStatus("active");
             setLicenseKey("");
@@ -76,12 +77,12 @@ export function LicenseTab() {
             <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold dark:text-white flex items-center gap-2">
                     <Key className="w-5 h-5 text-[var(--brand-primary)]" />
-                    License Management
+                    {t('admin.license.title')}
                 </h2>
                 <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${status === "active" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
-                    "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                        "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                     }`}>
-                    {status}
+                    {t(`admin.license.${status}`)}
                 </span>
             </div>
 
@@ -99,18 +100,22 @@ export function LicenseTab() {
                             </div>
                             <div>
                                 <h3 className="text-lg font-bold dark:text-white">{payload.business_name}</h3>
-                                <p className="text-sm text-gray-500 mb-2">Plan: <span className="uppercase font-semibold">{payload.plan}</span></p>
-                                <p className="text-xs text-gray-400">Expires: {new Date(payload.expires_at).toLocaleDateString()}</p>
+                                <p className="text-sm text-gray-500 mb-2">
+                                    {t('admin.license.plan')}: <span className="uppercase font-semibold">{payload.plan}</span>
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                    {t('admin.license.expires')}: {new Date(payload.expires_at).toLocaleDateString()}
+                                </p>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
                             <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded border dark:border-gray-700">
-                                <span className="block text-gray-500 text-xs uppercase">Max Seats</span>
+                                <span className="block text-gray-500 text-xs uppercase">{t('admin.license.max_seats')}</span>
                                 <span className="font-mono font-bold dark:text-gray-200">{payload.max_seats}</span>
                             </div>
                             <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded border dark:border-gray-700">
-                                <span className="block text-gray-500 text-xs uppercase">Features</span>
+                                <span className="block text-gray-500 text-xs uppercase">{t('admin.license.features')}</span>
                                 <div className="flex flex-wrap gap-1 mt-1">
                                     {payload.features.map(f => (
                                         <span key={f} className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-[10px]">
@@ -124,9 +129,9 @@ export function LicenseTab() {
                 ) : (
                     <div className="text-center py-6">
                         <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
-                        <h3 className="text-lg font-medium dark:text-white">Action Required</h3>
+                        <h3 className="text-lg font-medium dark:text-white">{t('admin.license.action_required')}</h3>
                         <p className="text-gray-500 text-sm max-w-md mx-auto">
-                            No active license found. Please verify your subscription or contact sales to activate your product.
+                            {t('admin.license.no_license_found')}
                         </p>
                     </div>
                 )}
@@ -134,11 +139,11 @@ export function LicenseTab() {
 
             {/* Upload Form */}
             <div className="bg-gray-50 dark:bg-[var(--brand-surface)] p-6 rounded-lg border dark:border-[var(--brand-border)]">
-                <h3 className="text-sm font-semibold mb-3 dark:text-gray-200">Update License Key</h3>
+                <h3 className="text-sm font-semibold mb-3 dark:text-gray-200">{t('admin.license.update_key')}</h3>
                 <textarea
                     value={licenseKey}
                     onChange={(e) => setLicenseKey(e.target.value)}
-                    placeholder="Paste your standard license key (starts with eyJ...)"
+                    placeholder={t('admin.license.placeholder')}
                     className="w-full h-24 p-3 text-xs font-mono bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-md focus:ring-2 focus:ring-[var(--brand-primary)] outline-none mb-3 resize-none"
                     spellCheck={false}
                 />
@@ -152,7 +157,7 @@ export function LicenseTab() {
                     className="px-4 py-2 bg-[var(--brand-primary)] text-white text-sm font-medium rounded-md hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                     {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                    Activate License
+                    {t('admin.license.activate')}
                 </button>
             </div>
         </div>

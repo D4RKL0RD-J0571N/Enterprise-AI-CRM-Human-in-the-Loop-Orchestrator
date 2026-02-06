@@ -99,6 +99,7 @@
             "secrets": "Secrets",
             "audit": "Security Logs",
             "snapshots": "History",
+            "license": "License",
             "analytics": "Analytics"
         },
         "branding": {
@@ -303,6 +304,25 @@
             "no_operational_logs": "No operational logs found",
             "status_passed": "Passed",
             "status_blocked": "Blocked"
+        },
+        "license": {
+            "title": "License Management",
+            "subtitle": "Manage your product license and plan entitlements.",
+            "status": "License Status",
+            "active": "Active",
+            "missing": "Missing",
+            "invalid": "Invalid",
+            "business_name": "Business Name",
+            "plan": "Plan",
+            "expires": "Expires",
+            "max_seats": "Max Seats",
+            "features": "Features",
+            "update_key": "Update License Key",
+            "placeholder": "Paste your license key here...",
+            "activate": "Activate License",
+            "success": "License activated successfully!",
+            "action_required": "Action Required",
+            "no_license_found": "No active license found. Please verify your subscription or contact sales to activate your product."
         }
     },
     "chat": {

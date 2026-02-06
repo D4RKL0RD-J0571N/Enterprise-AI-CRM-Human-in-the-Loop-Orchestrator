@@ -410,7 +410,7 @@ export default function AdminConfig({ onSave }: AdminConfigProps) {
             label: t('admin.sections.security'),
             icon: Lock,
             items: [
-                { id: "license", label: "License", icon: Key }, // New Item
+                { id: "license", label: t('admin.tabs.license'), icon: Key }, // Translated Item
                 { id: "secrets", label: t('admin.tabs.secrets'), icon: Lock },
                 { id: "audit", label: t('admin.tabs.audit'), icon: Eye },
             ]

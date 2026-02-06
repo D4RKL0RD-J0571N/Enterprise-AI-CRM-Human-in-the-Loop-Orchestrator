@@ -99,6 +99,7 @@
             "secrets": "Secretos",
             "audit": "Auditoría",
             "snapshots": "Historial",
+            "license": "Licencia",
             "analytics": "Analítica"
         },
         "branding": {
@@ -303,6 +304,25 @@
             "no_operational_logs": "No se encontraron registros operativos",
             "status_passed": "Pasó",
             "status_blocked": "Bloqueado"
+        },
+        "license": {
+            "title": "Gestión de Licencia",
+            "subtitle": "Gestione su licencia de producto y derechos del plan.",
+            "status": "Estado de la Licencia",
+            "active": "Activa",
+            "missing": "Faltante",
+            "invalid": "Inválida",
+            "business_name": "Nombre de la Empresa",
+            "plan": "Plan",
+            "expires": "Expira",
+            "max_seats": "Asientos Máximos",
+            "features": "Funcionalidades",
+            "update_key": "Actualizar Clave de Licencia",
+            "placeholder": "Pegue su clave de licencia aquí...",
+            "activate": "Activar Licencia",
+            "success": "¡Licencia activada con éxito!",
+            "action_required": "Acción Requerida",
+            "no_license_found": "No se encontró ninguna licencia activa. Por favor, verifique su suscripción o contacte a ventas para activar su producto."
         }
     },
     "chat": {
