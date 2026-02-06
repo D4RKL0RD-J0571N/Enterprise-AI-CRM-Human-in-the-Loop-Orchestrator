@@ -21,15 +21,15 @@ export const AnalyticsTab = ({ analytics, audits }: Props) => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                     <div className="space-y-6">
                         <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                            <BarChart2 className="w-4 h-4" /> {t('admin.audit_logs') || "Intenciones Detectadas"}
+                            <BarChart2 className="w-4 h-4" /> {t('admin.sections.intent_analytics')}
                         </h3>
-                        {analytics.length === 0 ? (
+                        {(!analytics || analytics.length === 0) ? (
                             <div className="text-center py-20 text-gray-400 border-2 border-dashed rounded-3xl dark:border-gray-800 font-medium">
                                 {t('admin.fields.analytics_no_data')}
                             </div>
                         ) : (
                             analytics.map((item, idx) => {
-                                const maxCount = Math.max(...analytics.map(a => a.count));
+                                const maxCount = Math.max(...(analytics || []).map(a => a.count));
                                 const ratio = item.count / maxCount;
                                 const colorClass = ratio > 0.7
                                     ? "from-orange-500 to-red-600"
@@ -61,14 +61,14 @@ export const AnalyticsTab = ({ analytics, audits }: Props) => {
                         {/* Safety Funnel */}
                         <div className="space-y-4">
                             <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                <Shield className="w-4 h-4" /> Embudo de Seguridad
+                                <Shield className="w-4 h-4" /> {t('admin.sections.safety_funnel')}
                             </h3>
                             <div className="space-y-2">
                                 {[
-                                    { label: "Total Consultas", count: audits.length, color: "bg-blue-500" },
-                                    { label: "Dominio Comercial", count: audits.filter(a => a.domain === 'Commercial/Logistics').length, color: "bg-indigo-500" },
-                                    { label: "Aprobado Auto", count: audits.filter(a => a.status === 'Passed').length, color: "bg-emerald-500" },
-                                    { label: "Violación Bloqueada", count: audits.filter(a => a.status === 'Blocked').length, color: "bg-red-500" }
+                                    { label: t('admin.sections.total_queries'), count: audits.length, color: "bg-blue-500" },
+                                    { label: t('admin.sections.commercial_domain'), count: audits.filter(a => a.domain === 'Commercial/Logistics').length, color: "bg-indigo-500" },
+                                    { label: t('admin.sections.auto_approved'), count: audits.filter(a => a.status === 'Passed').length, color: "bg-emerald-500" },
+                                    { label: t('admin.sections.blocked_violation'), count: audits.filter(a => a.status === 'Blocked').length, color: "bg-red-500" }
                                 ].map((step, i) => {
                                     const percentage = audits.length > 0 ? (step.count / audits.length) * 100 : 0;
                                     return (

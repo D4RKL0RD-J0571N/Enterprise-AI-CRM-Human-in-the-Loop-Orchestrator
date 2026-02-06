@@ -1,0 +1,42 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.0.2, pluggy-1.6.0
+rootdir: C:\Users\Jostin\.gemini\antigravity\playground\vacant-universe
+plugins: anyio-4.11.0, langsmith-0.4.43, asyncio-1.3.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 0 items / 1 error
+
+=================================== ERRORS ====================================
+________________ ERROR collecting tests/test_hitl_pipeline.py _________________
+tests\test_hitl_pipeline.py:16: in <module>
+    from main import app
+server\main.py:3: in <module>
+    from routers import whatsapp, websocket, conversations, admin, auth, system
+server\routers\whatsapp.py:4: in <module>
+    from database import get_async_db, AsyncSessionLocal
+server\database.py:18: in <module>
+    async_engine = create_async_engine(
+..\..\..\..\AppData\Roaming\Python\Python313\site-packages\sqlalchemy\ext\asyncio\engine.py:120: in create_async_engine
+    sync_engine = _create_engine(url, **kw)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in create_engine
+    ???
+..\..\..\..\AppData\Roaming\Python\Python313\site-packages\sqlalchemy\util\deprecations.py:281: in warned
+    return fn(*args, **kwargs)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^
+..\..\..\..\AppData\Roaming\Python\Python313\site-packages\sqlalchemy\engine\create.py:568: in create_engine
+    entrypoint = u._get_entrypoint()
+                 ^^^^^^^^^^^^^^^^^^^
+..\..\..\..\AppData\Roaming\Python\Python313\site-packages\sqlalchemy\engine\url.py:772: in _get_entrypoint
+    cls = registry.load(name)
+          ^^^^^^^^^^^^^^^^^^^
+..\..\..\..\AppData\Roaming\Python\Python313\site-packages\sqlalchemy\util\langhelpers.py:443: in load
+    loader = self.auto_fn(name)
+             ^^^^^^^^^^^^^^^^^^
+..\..\..\..\AppData\Roaming\Python\Python313\site-packages\sqlalchemy\dialects\__init__.py:32: in _auto_fn
+    dialect, driver = name.split(".")
+    ^^^^^^^^^^^^^^^
+E   ValueError: too many values to unpack (expected 2)
+=========================== short test summary info ===========================
+ERROR tests/test_hitl_pipeline.py - ValueError: too many values to unpack (ex...
+!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+============================== 1 error in 1.28s ===============================

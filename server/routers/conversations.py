@@ -1,11 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import select, delete, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
+from database import get_async_db
+from models import Client, Conversation, Message, AIConfig, User, AuditLog
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
-from database import get_db
-from models import Client, Conversation, Message
-from pydantic import BaseModel
 from logger import setup_logger
+from services.whatsapp_service import WhatsAppService
+from routers.auth import get_current_user
 import datetime
+import json
+from services.metrics import MESSAGE_APPROVALS_TOTAL, MESSAGE_REJECTIONS_TOTAL, HUMAN_MESSAGES_TOTAL
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 logger = setup_logger("conversations")
@@ -19,10 +25,10 @@ class MessageResponse(BaseModel):
     status: str
     is_ai_generated: bool
     confidence: Optional[int] = 0
+    is_violation: Optional[bool] = False
     metadata_json: Optional[str] = "{}"
     
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ConversationSummary(BaseModel):
     id: int
@@ -34,10 +40,10 @@ class ConversationSummary(BaseModel):
     is_active: bool
     is_archived: bool = False
     is_pinned: bool = False
+    auto_ai_enabled: bool = True
     has_pending: bool = False
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 class MessageUpdate(BaseModel):
     content: str
@@ -45,32 +51,76 @@ class MessageUpdate(BaseModel):
 class MessageCreate(BaseModel):
     content: str
 
+class BulkActionRequest(BaseModel):
+    conversation_ids: List[int]
+    action: str  # "archive", "delete"
+
+class BulkMessageActionRequest(BaseModel):
+    message_ids: List[int]
+    action: str  # "delete"
+
+class ClientInit(BaseModel):
+    phone_number: str
+    name: Optional[str] = None
+
+@router.post("/initiate")
+async def initiate_conversation(init: ClientInit, db: AsyncSession = Depends(get_async_db)):
+    """
+    Get or create a conversation for a phone number.
+    """
+    result = await db.execute(select(Client).filter(Client.phone_number == init.phone_number))
+    client = result.scalars().first()
+    if not client:
+        client = Client(phone_number=init.phone_number, name=init.name or f"User {init.phone_number}")
+        db.add(client)
+        await db.commit()
+    
+    result = await db.execute(select(Conversation).filter(
+        Conversation.client_id == client.id, 
+        Conversation.is_active == True
+    ))
+    conv = result.scalars().first()
+    
+    if not conv:
+        conv = Conversation(client_id=client.id, is_active=True)
+        db.add(conv)
+        await db.commit()
+        await db.refresh(conv)
+        
+    return {"id": conv.id, "client_name": client.name, "client_phone": client.phone_number}
+
 @router.get("/", response_model=List[ConversationSummary])
-def get_conversations(db: Session = Depends(get_db)):
+async def get_conversations(db: AsyncSession = Depends(get_async_db)):
     """
     Get all conversations with their latest status for the sidebar.
     """
-    # Query all clients that have conversations
-    # For simplicity, we assume one active conversation per client for now, 
-    # or we just list the clients.
-    
     results = []
     
     # Get all clients
-    clients = db.query(Client).all()
+    result = await db.execute(select(Client))
+    clients = result.scalars().all()
     
     for client in clients:
         # Get latest conversation
-        conv = db.query(Conversation).filter(
+        conv_result = await db.execute(select(Conversation).filter(
             Conversation.client_id == client.id
-        ).order_by(Conversation.started_at.desc()).first()
+        ).order_by(Conversation.started_at.desc()).limit(1))
+        conv = conv_result.scalars().first()
         
         if conv:
             # Get latest message
-            last_msg = db.query(Message).filter(
+            msg_result = await db.execute(select(Message).filter(
                 Message.conversation_id == conv.id
-            ).order_by(Message.timestamp.desc()).first()
+            ).order_by(Message.timestamp.desc()).limit(1))
+            last_msg = msg_result.scalars().first()
             
+            # Check for pending messages
+            pending_result = await db.execute(select(Message).filter(
+                Message.conversation_id == conv.id,
+                Message.status == "pending"
+            ))
+            has_pending = pending_result.scalars().first() is not None
+
             results.append({
                 "id": conv.id,
                 "client_id": client.id,
@@ -81,7 +131,8 @@ def get_conversations(db: Session = Depends(get_db)):
                 "is_active": conv.is_active,
                 "is_archived": conv.is_archived,
                 "is_pinned": conv.is_pinned,
-                "has_pending": any(m.status == "pending" for m in conv.messages)
+                "auto_ai_enabled": conv.auto_ai_enabled,
+                "has_pending": has_pending
             })
             
     # Sort by pinned first, then time desc
@@ -89,13 +140,14 @@ def get_conversations(db: Session = Depends(get_db)):
     return results
 
 @router.get("/{conversation_id}/messages", response_model=List[MessageResponse])
-def get_conversation_messages(conversation_id: int, db: Session = Depends(get_db)):
+async def get_conversation_messages(conversation_id: int, db: AsyncSession = Depends(get_async_db)):
     """
     Get full message history for a conversation.
     """
-    messages = db.query(Message).filter(
+    result = await db.execute(select(Message).filter(
         Message.conversation_id == conversation_id
-    ).order_by(Message.timestamp.asc()).all()
+    ).order_by(Message.timestamp.asc()))
+    messages = result.scalars().all()
     
     return messages
 
@@ -103,16 +155,22 @@ from routers.websocket import manager
 import json
 
 @router.post("/messages/{message_id}/approve")
-async def approve_message(message_id: int, db: Session = Depends(get_db)):
+async def approve_message(message_id: int, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user)):
     """
     Approve a pending AI message to be sent.
     """
-    msg = db.query(Message).filter(Message.id == message_id).first()
+    result = await db.execute(
+        select(Message)
+        .options(joinedload(Message.conversation).joinedload(Conversation.client))
+        .filter(Message.id == message_id)
+    )
+    msg = result.scalars().first()
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
         
     msg.status = "sent"
-    db.commit()
+    await db.commit()
+    MESSAGE_APPROVALS_TOTAL.inc()
     logger.info(f"Message {message_id} APPROVED and marked as sent")
     
     # Broadcast update
@@ -127,105 +185,164 @@ async def approve_message(message_id: int, db: Session = Depends(get_db)):
         "is_ai_generated": True
     }))
     
+    # --- OUTBOUND DELIVERY ---
+    result = await db.execute(select(AIConfig).filter(AIConfig.is_active == True))
+    config = result.scalars().first()
+    if config:
+        config_dict = {
+            "whatsapp_driver": config.whatsapp_driver,
+            "whatsapp_api_token": config.whatsapp_api_token,
+            "whatsapp_phone_id": config.whatsapp_phone_id
+        }
+        driver = WhatsAppService.get_driver(config_dict)
+        external_id = await driver.send_message(to=client_phone, text=msg.content)
+        if isinstance(external_id, str):
+            msg.external_id = external_id
+            await db.commit()
+    # -------------------------
+
+    # --- AUDIT LOG ---
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="APPROVE_MESSAGE",
+        resource=f"Message {message_id}",
+        details=f"Approved AI suggestion for {client_phone}"
+    )
+    db.add(audit)
+    await db.commit()
+    # -----------------
+    
     return {"status": "approved"}
 
 @router.post("/messages/{message_id}/reject")
-async def reject_message(message_id: int, db: Session = Depends(get_db)):
+async def reject_message(message_id: int, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user)):
     """
     Reject (delete) a pending AI message.
     """
-    msg = db.query(Message).filter(Message.id == message_id).first()
+    result = await db.execute(select(Message).filter(Message.id == message_id))
+    msg = result.scalars().first()
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
         
-    db.delete(msg)
-    db.commit()
-    logger.info(f"Message {message_id} REJECTED and deleted")
+    await db.delete(msg)
+    await db.commit()
+    MESSAGE_REJECTIONS_TOTAL.inc()
+    logger.info(f"Message {message_id} REJECTED and deleted by {current_user.username}")
     
-    # Broadcast deletion so UI updates? 
-    # Or just returning success is enough if frontend optimistically removes it.
-    # But other clients might need to know.
-    # We can send a special "delete" event or just rely on re-fetch.
-    # For now, let's just return success.
+    # --- AUDIT LOG ---
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="REJECT_MESSAGE",
+        resource=f"Message {message_id}",
+        details=f"Rejected AI suggestion"
+    )
+    db.add(audit)
+    await db.commit()
+    # -----------------
     
     return {"status": "rejected"}
 
 @router.put("/messages/{message_id}")
-async def edit_message(message_id: int, update: MessageUpdate, db: Session = Depends(get_db)):
+async def edit_message(message_id: int, update: MessageUpdate, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user)):
     """
     Edit a pending message content.
     """
-    msg = db.query(Message).filter(Message.id == message_id).first()
+    result = await db.execute(select(Message).filter(Message.id == message_id))
+    msg = result.scalars().first()
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
         
+    old_content = msg.content
     msg.content = update.content
-    db.commit()
-    logger.info(f"Message {message_id} EDITED by operator")
+    await db.commit()
+    logger.info(f"Message {message_id} EDITED by {current_user.username}")
+    
+    # --- AUDIT LOG ---
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="EDIT_MESSAGE",
+        resource=f"Message {message_id}",
+        details=f"Modified AI suggestion. Original: {old_content[:50]}..."
+    )
+    db.add(audit)
+    await db.commit()
+    # -----------------
     
     return {"status": "updated", "content": msg.content}
 
 @router.post("/{conversation_id}/archive")
-async def archive_conversation(conversation_id: int, db: Session = Depends(get_db)):
-    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+async def archive_conversation(conversation_id: int, db: AsyncSession = Depends(get_async_db)):
+    result = await db.execute(select(Conversation).filter(Conversation.id == conversation_id))
+    conv = result.scalars().first()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
     conv.is_archived = True
-    db.commit()
+    await db.commit()
     logger.info(f"Conversation {conversation_id} ARCHIVED")
     return {"status": "archived"}
 
 @router.post("/{conversation_id}/unarchive")
-async def unarchive_conversation(conversation_id: int, db: Session = Depends(get_db)):
-    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+async def unarchive_conversation(conversation_id: int, db: AsyncSession = Depends(get_async_db)):
+    result = await db.execute(select(Conversation).filter(Conversation.id == conversation_id))
+    conv = result.scalars().first()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
     conv.is_archived = False
-    db.commit()
+    await db.commit()
     return {"status": "unarchived"}
 
 @router.post("/{conversation_id}/pin")
-async def pin_conversation(conversation_id: int, db: Session = Depends(get_db)):
-    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+async def pin_conversation(conversation_id: int, db: AsyncSession = Depends(get_async_db)):
+    result = await db.execute(select(Conversation).filter(Conversation.id == conversation_id))
+    conv = result.scalars().first()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
     conv.is_pinned = True
-    db.commit()
+    await db.commit()
     logger.info(f"Conversation {conversation_id} PINNED")
     return {"status": "pinned"}
 
 @router.post("/{conversation_id}/unpin")
-async def unpin_conversation(conversation_id: int, db: Session = Depends(get_db)):
-    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+async def unpin_conversation(conversation_id: int, db: AsyncSession = Depends(get_async_db)):
+    result = await db.execute(select(Conversation).filter(Conversation.id == conversation_id))
+    conv = result.scalars().first()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
     conv.is_pinned = False
-    db.commit()
+    await db.commit()
     return {"status": "unpinned"}
 
+@router.post("/{conversation_id}/toggle-auto-ai")
+async def toggle_auto_ai(conversation_id: int, db: AsyncSession = Depends(get_async_db)):
+    result = await db.execute(select(Conversation).filter(Conversation.id == conversation_id))
+    conv = result.scalars().first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    conv.auto_ai_enabled = not conv.auto_ai_enabled
+    await db.commit()
+    logger.info(f"Conversation {conversation_id} AI set to {conv.auto_ai_enabled}")
+    return {"status": "updated", "auto_ai_enabled": conv.auto_ai_enabled}
+
 @router.delete("/{conversation_id}")
-async def delete_conversation(conversation_id: int, db: Session = Depends(get_db)):
+async def delete_conversation(conversation_id: int, db: AsyncSession = Depends(get_async_db)):
     """
     Delete a conversation and all its messages.
     """
-    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+    result = await db.execute(select(Conversation).filter(Conversation.id == conversation_id))
+    conv = result.scalars().first()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
     
     # Cascade delete messages manually if not handled by DB FK
-    db.query(Message).filter(Message.conversation_id == conversation_id).delete()
-    db.delete(conv)
-    db.commit()
+    await db.execute(delete(Message).filter(Message.conversation_id == conversation_id))
+    await db.delete(conv)
+    await db.commit()
     
     logger.info(f"Conversation {conversation_id} and its messages DELETED")
     return {"status": "deleted"}
 
-class BulkActionRequest(BaseModel):
-    conversation_ids: List[int]
-    action: str  # "archive", "delete"
-
 @router.post("/bulk-action")
-async def bulk_conversation_action(req: BulkActionRequest, db: Session = Depends(get_db)):
+async def bulk_conversation_action(req: BulkActionRequest, db: AsyncSession = Depends(get_async_db)):
     """
     Perform bulk actions on multiple conversations.
     """
@@ -235,29 +352,49 @@ async def bulk_conversation_action(req: BulkActionRequest, db: Session = Depends
     logger.info(f"Processing bulk action '{req.action}' for {len(req.conversation_ids)} conversations")
     
     if req.action == "archive":
-        db.query(Conversation).filter(Conversation.id.in_(req.conversation_ids)).update(
-            {Conversation.is_archived: True}, synchronize_session=False
-        )
-        db.commit()
+        await db.execute(update(Conversation).filter(Conversation.id.in_(req.conversation_ids)).values(is_archived=True))
+        await db.commit()
         return {"status": "success", "action": "archive", "count": len(req.conversation_ids)}
         
     elif req.action == "delete":
         # Delete messages first
-        db.query(Message).filter(Message.conversation_id.in_(req.conversation_ids)).delete(synchronize_session=False)
+        await db.execute(delete(Message).filter(Message.conversation_id.in_(req.conversation_ids)))
         # Delete conversations
-        db.query(Conversation).filter(Conversation.id.in_(req.conversation_ids)).delete(synchronize_session=False)
-        db.commit()
+        await db.execute(delete(Conversation).filter(Conversation.id.in_(req.conversation_ids)))
+        await db.commit()
         return {"status": "success", "action": "delete", "count": len(req.conversation_ids)}
         
     else:
         raise HTTPException(status_code=400, detail="Invalid action")
 
+@router.post("/messages/bulk-action")
+async def bulk_message_action(req: BulkMessageActionRequest, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user)):
+    """
+    Perform bulk actions on multiple messages.
+    """
+    if not req.message_ids:
+        return {"status": "no_op", "count": 0}
+    
+    logger.info(f"Processing bulk message action '{req.action}' for {len(req.message_ids)} messages by {current_user.username}")
+    
+    if req.action == "delete":
+        await db.execute(delete(Message).filter(Message.id.in_(req.message_ids)))
+        await db.commit()
+        return {"status": "success", "action": "delete", "count": len(req.message_ids)}
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action")
+
 @router.post("/{conversation_id}/messages")
-async def send_human_message(conversation_id: int, req: MessageCreate, db: Session = Depends(get_db)):
+async def send_human_message(conversation_id: int, req: MessageCreate, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user)):
     """
     Send a message from the human operator.
     """
-    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+    result = await db.execute(
+        select(Conversation)
+        .options(joinedload(Conversation.client))
+        .filter(Conversation.id == conversation_id)
+    )
+    conv = result.scalars().first()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
         
@@ -269,8 +406,9 @@ async def send_human_message(conversation_id: int, req: MessageCreate, db: Sessi
         is_ai_generated=False
     )
     db.add(msg)
-    db.commit()
-    db.refresh(msg)
+    await db.commit()
+    await db.refresh(msg)
+    HUMAN_MESSAGES_TOTAL.inc()
     
     # Broadcast to sync all dashboard instances
     client_phone = conv.client.phone_number
@@ -283,5 +421,21 @@ async def send_human_message(conversation_id: int, req: MessageCreate, db: Sessi
         "status": "sent",
         "is_ai_generated": False
     }))
+    
+    # --- OUTBOUND DELIVERY ---
+    result = await db.execute(select(AIConfig).filter(AIConfig.is_active == True))
+    config = result.scalars().first()
+    if config:
+        config_dict = {
+            "whatsapp_driver": config.whatsapp_driver,
+            "whatsapp_api_token": config.whatsapp_api_token,
+            "whatsapp_phone_id": config.whatsapp_phone_id
+        }
+        driver = WhatsAppService.get_driver(config_dict)
+        external_id = await driver.send_message(to=client_phone, text=msg.content)
+        if isinstance(external_id, str):
+            msg.external_id = external_id
+            await db.commit()
+    # -------------------------
     
     return {"status": "sent", "id": msg.id}

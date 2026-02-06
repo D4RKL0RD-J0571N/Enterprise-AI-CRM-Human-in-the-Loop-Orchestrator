@@ -10,8 +10,7 @@ import {
     Minimize2,
     User,
     Bot,
-    AlertTriangle,
-    CheckCircle2
+    Sparkles
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Menu, Item, useContextMenu, Separator } from 'react-contexify';
@@ -19,14 +18,16 @@ import 'react-contexify/dist/ReactContexify.css';
 
 interface Message {
     id: number;
-    role: "client" | "user";
     sender: string;
     text: string;
     content?: string;
     timestamp: string;
     status: string;
-    is_ai?: boolean;
+    is_ai_generated?: boolean;
     metadata?: any;
+    media_url?: string;
+    media_type?: string;
+    suggested_replies?: string[];
 }
 
 interface ChatWindowProps {
@@ -36,7 +37,6 @@ interface ChatWindowProps {
     isThinking: boolean;
     onSendMessage: (text: string) => void;
     onApprove: (id: number) => void;
-    onReject: (id: number) => void;
     onEdit: (id: number, text: string) => void;
     onDelete: (id: number) => void;
     onMaximize: () => void;
@@ -46,6 +46,10 @@ interface ChatWindowProps {
     canDrag?: boolean;
     onDragStart?: (e: React.MouseEvent) => void;
     onResizeStart?: (e: React.MouseEvent) => void;
+    autoAIEnabled?: boolean;
+    onToggleAI?: () => void;
+    timezone?: string;
+    onBulkDelete?: (ids: number[]) => void;
 }
 
 const MESSAGE_MENU_ID = "msg-context-menu";
@@ -57,7 +61,6 @@ const ChatWindow = memo(({
     isThinking,
     onSendMessage,
     onApprove,
-    onReject,
     onEdit,
     onDelete,
     onMaximize,
@@ -66,12 +69,34 @@ const ChatWindow = memo(({
     isLoading,
     canDrag,
     onDragStart,
-    onResizeStart
+    onResizeStart,
+    autoAIEnabled = true,
+    onToggleAI,
+    timezone,
+    onBulkDelete
 }: ChatWindowProps) => {
     const { t } = useTranslation();
     const [inputValue, setInputValue] = useState("");
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [editingId, setEditingId] = useState<number | null>(null);
+    const [editValue, setEditValue] = useState("");
+    const [deletingId, setDeletingId] = useState<number | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const { show } = useContextMenu({ id: `${MESSAGE_MENU_ID}-${conversationId}` });
+
+    const formatTime = (ts: string) => {
+        if (!ts) return "Just now";
+        const isoTs = ts.includes('Z') || ts.includes('+') ? ts : ts.replace(' ', 'T') + 'Z';
+        try {
+            return new Date(isoTs).toLocaleTimeString('es-CR', {
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: timezone || 'UTC'
+            });
+        } catch (e) {
+            return new Date(ts).toLocaleTimeString();
+        }
+    };
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -90,122 +115,179 @@ const ChatWindow = memo(({
         setInputValue("");
     };
 
+    const toggleMessageSelection = (id: number) => {
+        setSelectedIds(prev =>
+            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        );
+    };
+
+    const handleBulkDelete = () => {
+        if (selectedIds.length === 0) return;
+        setDeletingId(-1); // Special ID to indicate bulk delete confirmation
+    };
+
+    const confirmBulkDelete = () => {
+        onBulkDelete?.(selectedIds);
+        setSelectedIds([]);
+        setDeletingId(null);
+    };
+
+    const startEditing = (id: number, text: string) => {
+        setEditingId(id);
+        setEditValue(text);
+        setDeletingId(null);
+    };
+
+    const saveEdit = () => {
+        if (editingId !== null) {
+            onEdit(editingId, editValue);
+            setEditingId(null);
+        }
+    };
+
     return (
-        <div className="flex flex-col h-full bg-white dark:bg-gray-950 transition-all border dark:border-gray-800 rounded-2xl overflow-hidden shadow-2xl relative select-none">
-            {/* HEADER - Drag Handle */}
+        <div className={`flex flex-col h-full bg-white dark:bg-[var(--brand-surface)] transition-all relative select-none ${isMaximized ? "border-none" : "border dark:border-[var(--brand-border)]"} shadow-2xl`} style={{ borderRadius: isMaximized ? '0' : 'var(--brand-radius)' }}>
             <div
-                className={`p-4 flex items-center justify-between bg-gray-50/50 dark:bg-gray-900/50 border-b dark:border-gray-800 backdrop-blur-md sticky top-0 z-10 ${canDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
+                className={`flex items-center justify-between p-4 border-b dark:border-[var(--brand-border)] bg-gray-50 dark:bg-[var(--brand-surface)]/80 backdrop-blur-md z-20 ${canDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
                 onMouseDown={onDragStart}
             >
                 <div className="flex items-center gap-3 pointer-events-none">
-                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black shadow-lg shadow-indigo-500/20">
+                    <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-white font-black shadow-lg shadow-[var(--brand-primary)]/20"
+                        style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary))' }}
+                    >
                         {clientName.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                        <h3 className="text-sm font-black dark:text-white flex items-center gap-2">
+                        <h3 className="text-sm font-black dark:text-white flex items-center gap-2 select-none">
                             {clientName}
                             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                         </h3>
-                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest flex items-center gap-1">
+                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest flex items-center gap-1 tabular-nums select-none">
                             <Clock className="w-3 h-3" /> ID: {conversationId}
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-1">
-                    <button onClick={onMaximize} className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-xl transition-all text-gray-500 hover:text-indigo-500">
+                <div className="flex gap-1 items-center">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onToggleAI?.(); }}
+                        aria-label={autoAIEnabled ? "Disable AI Auto-respond" : "Enable AI Auto-respond"}
+                        className={`p-1.5 rounded-lg transition-all flex items-center gap-1.5 hover-premium select-none ${autoAIEnabled ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'text-amber-600 bg-amber-50 dark:bg-amber-900/20'}`}
+                    >
+                        <Sparkles className={`w-3.5 h-3.5 ${autoAIEnabled ? 'animate-pulse' : 'opacity-40'}`} />
+                        <span className="text-[10px] font-bold uppercase tracking-tighter hidden sm:inline">
+                            {autoAIEnabled ? t('chat.ai_auto') : t('chat.manual')}
+                        </span>
+                    </button>
+                    <button
+                        onClick={onMaximize}
+                        aria-label={isMaximized ? t('common.minimize') : t('common.maximize')}
+                        className="p-2 hover:bg-white dark:hover:bg-[var(--brand-bg)] rounded-xl transition-all text-gray-500 hover:text-[var(--brand-primary)] hover-premium select-none"
+                    >
                         {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                     </button>
-                    <button onClick={onClose} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all text-gray-500 hover:text-red-500">
+                    <button
+                        onClick={onClose}
+                        aria-label={t('common.close')}
+                        className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all text-gray-500 hover:text-red-500 hover-premium select-none"
+                    >
                         <X className="w-4 h-4" />
                     </button>
                 </div>
             </div>
 
             {/* MESSAGES */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth custom-scrollbar bg-white dark:bg-gray-950">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto scroll-smooth custom-scrollbar bg-white dark:bg-[var(--brand-surface)] p-4 space-y-4">
                 {isLoading && (
-                    <div className="flex flex-col gap-4 animate-pulse p-4">
-                        <div className="h-12 bg-gray-100 dark:bg-gray-800 rounded-3xl w-2/3 self-start"></div>
-                        <div className="h-12 bg-gray-100 dark:bg-gray-800 rounded-3xl w-1/2 self-end"></div>
-                        <div className="h-24 bg-gray-100 dark:bg-gray-800 rounded-3xl w-3/4 self-start"></div>
-                    </div>
-                )}
-
-                {!isLoading && messages.length === 0 && (
-                    <div className="h-full flex flex-col items-center justify-center opacity-30 select-none">
-                        <Bot className="w-16 h-16 mb-4" />
-                        <p className="font-black uppercase tracking-[0.3em] text-xs">Waiting for events...</p>
+                    <div className="flex flex-col gap-4 animate-pulse">
+                        <div className="h-12 bg-gray-100 dark:bg-[var(--brand-bg)] rounded-3xl w-2/3 self-start"></div>
+                        <div className="h-12 bg-gray-100 dark:bg-[var(--brand-bg)] rounded-3xl w-1/2 self-end"></div>
                     </div>
                 )}
 
                 {messages.map((m, idx) => {
                     const isPending = m.status === 'pending' || m.status === 'pending_review';
-                    const isAI = m.is_ai;
-                    const alignRight = (m.role === "user" && !isPending);
-                    const isOperator = m.role === "user" && !isAI;
+                    const isAI = m.is_ai_generated;
+                    const alignRight = m.sender === "agent" || m.sender === "system";
+                    const label = m.sender === "system" ? t('chat.system') : (isPending ? t('chat.ai_suggestion_label') : (isAI ? t('chat.ai_label') : (m.sender === "agent" ? t('chat.you') : t('chat.client_label'))));
 
                     return (
-                        <div key={`${m.id}-${idx}`} className={`flex flex-col ${alignRight ? "items-end" : "items-start"} group`}>
-                            <div className={`flex ${alignRight ? "justify-end" : "justify-start"} w-full relative`}>
-                                <div className={`p-4 rounded-3xl max-w-[85%] sm:max-w-md shadow-sm relative transition-all ${isPending
-                                    ? "bg-amber-50 dark:bg-amber-900/20 border-2 border-dashed border-amber-300 rounded-bl-none"
-                                    : alignRight
-                                        ? "bg-indigo-600 text-white rounded-br-none shadow-indigo-200 dark:shadow-none"
-                                        : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100 rounded-bl-none"
-                                    }`}
-                                    onContextMenu={(e) => handleContextMenu(e, m.id, m.text)}
+                        <div key={`${m.id}-${idx}`} className={`flex items-start gap-2 ${alignRight ? "flex-row-reverse" : "flex-row"} group`}>
+                            <div className={`mt-4 transition-all duration-200 ${selectedIds.includes(m.id) ? "opacity-100 scale-110" : "opacity-20 group-hover:opacity-100"}`}>
+                                <input
+                                    type="checkbox"
+                                    checked={selectedIds.includes(m.id)}
+                                    onChange={() => toggleMessageSelection(m.id)}
+                                    className="w-4 h-4 rounded-md border-gray-300 dark:border-[var(--brand-border)] text-[var(--brand-primary)] focus:ring-[var(--brand-primary)] cursor-pointer transition-all"
+                                />
+                            </div>
+                            <div className={`flex flex-col ${alignRight ? "items-end" : "items-start"} flex-1`}>
+                                <div className={`max-w-[85%] sm:max-w-md shadow-sm relative p-3 transition-all ${isPending ? "bg-amber-50 dark:bg-amber-900/20 border-2 border-dashed border-amber-300 rounded-bl-none" : alignRight ? "text-white rounded-br-none" : "bg-gray-100 text-gray-800 dark:bg-[var(--brand-bubble-client-dark)] dark:text-gray-100 rounded-bl-none"}`}
+                                    style={{ borderRadius: 'var(--brand-radius)', backgroundColor: alignRight && !isPending ? "var(--brand-primary)" : undefined }}
+                                    onContextMenu={(e) => handleContextMenu(e, m.id, m.text || m.content || "")}
                                 >
-                                    <div className="flex justify-between items-center mb-1.5 gap-4">
-                                        <div className="flex items-center gap-2">
-                                            {isAI ? <Bot className="w-3.5 h-3.5 opacity-70" /> : <User className="w-3.5 h-3.5 opacity-70" />}
-                                            <span className={`text-[10px] font-black uppercase tracking-widest ${alignRight ? "text-indigo-100" : "text-gray-400"}`}>
-                                                {isOperator ? t('chat.you') : (isPending ? t('chat.ai_suggestion_label') : (isAI ? t('chat.ai_label') : t('chat.client_label')))}
-                                            </span>
-                                            {m.metadata?.domain && (
-                                                <span className={`px-1.5 py-0.5 rounded-md uppercase font-black text-[7px] border ${alignRight ? "bg-indigo-700/50 border-white/20" : "bg-white dark:bg-gray-900 dark:border-gray-700 text-gray-500"
-                                                    }`}>
-                                                    {m.metadata.domain}
-                                                </span>
+                                    <div className="flex justify-between items-center mb-1 gap-2">
+                                        <div className="flex items-center gap-1">
+                                            {isAI ? <Bot className="w-3 h-3 opacity-70" /> : <User className="w-3 h-3 opacity-70" />}
+                                            <span className="text-[10px] font-black uppercase tracking-widest opacity-70">{label}</span>
+                                        </div>
+                                    </div>
+
+                                    {editingId === m.id ? (
+                                        <div className="space-y-3 bg-white/5 p-4 rounded-2xl border border-white/10 shadow-inner">
+                                            <textarea
+                                                value={editValue}
+                                                onChange={(e) => setEditValue(e.target.value)}
+                                                className="w-full bg-white/10 dark:bg-black/20 border border-white/20 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-white/30 min-h-[120px] resize-none font-medium"
+                                                autoFocus
+                                            />
+                                            {m.suggested_replies && m.suggested_replies.length > 0 && (
+                                                <div className="flex flex-wrap gap-2 pt-2">
+                                                    {m.suggested_replies.map((reply, i) => (
+                                                        <button
+                                                            key={i}
+                                                            onClick={() => setEditValue(reply)}
+                                                            className="text-[10px] font-bold px-3 py-1.5 bg-[var(--brand-primary-muted)] text-[var(--brand-primary)] rounded-lg border border-[var(--brand-primary-border)] hover:opacity-80 transition-all select-none hover-premium"
+                                                        >
+                                                            {reply}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             )}
+                                            <div className="flex gap-3 justify-end items-center">
+                                                <button onClick={() => setEditingId(null)} className="text-[10px] font-black uppercase px-4 py-2 hover:bg-white/10 rounded-xl transition-all border border-transparent select-none">{t('common.cancel')}</button>
+                                                <button onClick={saveEdit} className="text-[10px] font-black uppercase px-5 py-2 bg-white text-[var(--brand-primary)] dark:text-gray-900 rounded-xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all select-none hover-premium">{t('common.save')}</button>
+                                            </div>
                                         </div>
-                                        {m.metadata?.intent === "Violation" && (
-                                            <span className="bg-red-500 text-white text-[7px] px-2 py-0.5 rounded-full font-black animate-pulse flex items-center gap-1">
-                                                <AlertTriangle className="w-2.5 h-2.5" /> SENTINEL
-                                            </span>
-                                        )}
-                                    </div>
+                                    ) : (
+                                        <p className="text-sm font-medium leading-relaxed">{m.text || m.content}</p>
+                                    )}
 
-                                    {isPending && (
-                                        <div className="mb-2 text-xs font-bold text-amber-700 dark:text-amber-400 flex justify-between items-center bg-amber-500/10 px-2 py-1.5 rounded-xl border border-amber-300/30">
-                                            <span className="flex items-center gap-1.5 italic">✨ AI Suggestion</span>
-                                            <span className="text-[9px] opacity-70 uppercase tracking-tighter bg-amber-200 dark:bg-amber-800 px-1.5 py-0.5 rounded-md">Review</span>
+                                    {deletingId === m.id && (
+                                        <div className="mt-4 p-4 bg-red-600/10 border border-red-500/30 rounded-2xl animate-in fade-in slide-in-from-bottom-2 duration-300 backdrop-blur-sm">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <div className="w-6 h-6 rounded-full bg-red-600 flex items-center justify-center">
+                                                    <Trash2 className="w-3.5 h-3.5 text-white" />
+                                                </div>
+                                                <p className="text-[11px] font-black uppercase tracking-tight text-red-600">{t('chat.alerts.confirm_delete')}</p>
+                                            </div>
+                                            <div className="flex gap-3">
+                                                <button onClick={() => setDeletingId(null)} className="flex-1 py-2 text-[10px] font-black uppercase bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl transition-all select-none">{t('common.no')}</button>
+                                                <button onClick={() => { onDelete(m.id); setDeletingId(null); }} className="flex-1 py-2 text-[10px] font-black uppercase bg-red-600 text-white shadow-lg shadow-red-600/20 rounded-xl hover:bg-red-700 transition-all select-none hover-premium">{t('common.yes')}</button>
+                                            </div>
                                         </div>
                                     )}
 
-                                    <p className={`leading-relaxed text-sm whitespace-pre-wrap font-medium ${isPending ? 'italic opacity-70' : ''}`}>
-                                        {m.text || m.content || <span className="opacity-20 italic">No content</span>}
-                                    </p>
-
+                                    <div className={`text-[9px] mt-2 flex items-center gap-2 font-mono tabular-nums ${alignRight ? "justify-end opacity-80" : "justify-start opacity-60"}`}>
+                                        {formatTime(m.timestamp)}
+                                        {m.status === 'sent' && !isPending && <Check className="w-3 h-3" />}
+                                    </div>
                                     {isPending && (
-                                        <div className="mt-4 flex gap-2 border-t border-amber-200 dark:border-amber-800 pt-3">
-                                            <button onClick={() => onApprove(m.id)} className="flex-1 bg-green-600 hover:bg-green-700 text-white text-[10px] py-2 rounded-xl transition-all font-black flex items-center justify-center gap-1.5 shadow-lg shadow-green-500/20">
-                                                <CheckCircle2 className="w-3 h-3" /> APPROVE
-                                            </button>
-                                            <button onClick={() => onEdit(m.id, m.text)} className="flex-1 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-[10px] py-2 rounded-xl font-black border dark:border-gray-700 hover:bg-gray-50">
-                                                <Edit3 className="w-3 h-3 inline mr-1" /> EDIT
-                                            </button>
-                                            <button onClick={() => onReject(m.id)} className="flex-1 bg-red-50 dark:bg-red-900/10 text-red-600 text-[10px] py-2 rounded-xl font-black hover:bg-red-100 flex items-center justify-center gap-1">
-                                                <X className="w-3 h-3" /> REJECT
-                                            </button>
+                                        <div className="mt-3 flex gap-2 pt-2 border-t border-amber-200 dark:border-amber-800">
+                                            <button onClick={() => onApprove(m.id)} className="flex-1 bg-green-600 text-white text-[9px] py-1.5 rounded-lg font-black select-none hover-premium">{t('common.approve')}</button>
+                                            <button onClick={() => startEditing(m.id, m.text || m.content || "")} className="flex-1 bg-white text-gray-700 text-[9px] py-1.5 rounded-lg font-black border select-none hover-premium">{t('common.edit')}</button>
+                                            <button onClick={() => setDeletingId(m.id)} className="flex-1 bg-red-600 text-white text-[9px] py-1.5 rounded-lg font-black select-none hover-premium">{t('common.reject')}</button>
                                         </div>
                                     )}
-
-                                    <div className={`text-[9px] mt-2 flex items-center gap-2 font-mono ${alignRight ? "justify-end text-indigo-100" : "justify-start opacity-60"}`}>
-                                        {m.status === 'sending' && <span className="animate-pulse">•••</span>}
-                                        {m.timestamp ? new Date(m.timestamp).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' }) : "Just now"}
-                                        {m.status === 'pending' && <span className="animate-spin text-amber-500 text-[8px]">⏳</span>}
-                                        {m.status === 'sent' && !isPending && <Check className="w-3 h-3 text-indigo-200" />}
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -214,63 +296,76 @@ const ChatWindow = memo(({
 
                 {isThinking && (
                     <div className="flex justify-start">
-                        <div className="p-4 rounded-3xl rounded-bl-none bg-gray-100 dark:bg-gray-800 flex items-center gap-3 shadow-md border dark:border-gray-700">
-                            <span className="flex gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full animate-bounce bg-blue-500"></span>
-                                <span className="w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:-0.15s] bg-blue-500"></span>
-                                <span className="w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:-0.3s] bg-blue-500"></span>
-                            </span>
-                            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{t('chat.thinking')}</span>
+                        <div className="p-3 bg-gray-100 dark:bg-[var(--brand-surface)] rounded-2xl rounded-bl-none flex gap-1 animate-pulse" style={{ borderRadius: 'var(--brand-radius)' }}>
+                            <span className="w-1.5 h-1.5 bg-[var(--brand-primary)] rounded-full"></span>
+                            <span className="w-1.5 h-1.5 bg-[var(--brand-primary)] rounded-full"></span>
+                            <span className="w-1.5 h-1.5 bg-[var(--brand-primary)] rounded-full"></span>
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* INPUT */}
-            <div className="p-4 bg-gray-50/50 dark:bg-gray-900/50 border-t dark:border-gray-800 backdrop-blur-md sticky bottom-0">
-                <div className="flex gap-2 bg-white dark:bg-gray-800 p-2 rounded-2xl shadow-inner border dark:border-gray-700 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
-                    <textarea
-                        value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                        placeholder={t('chat.input_placeholder')}
-                        className="flex-1 bg-transparent border-none focus:ring-0 text-sm resize-none py-2 px-3 h-10 max-h-32 dark:text-gray-100 font-medium"
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                handleSend();
-                            }
-                        }}
-                    />
-                    <button
-                        onClick={handleSend}
-                        disabled={!inputValue.trim()}
-                        className="p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-500/30 transition-all active:scale-95 disabled:opacity-50 disabled:shadow-none"
-                    >
-                        <SendHorizontal className="w-5 h-5" />
-                    </button>
-                </div>
-                <div className="mt-2 text-[8px] text-center text-gray-400 font-black uppercase tracking-[0.2em] select-none">
-                    Human Operator Assistance Layer Active
-                </div>
-            </div>
+            {/* BULK ACTION BAR */}
+            {selectedIds.length > 0 && (
+                <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[70] bg-white dark:bg-[var(--brand-surface)] border dark:border-[var(--brand-border)] shadow-2xl rounded-2xl p-2 flex items-center gap-3 animate-in fade-in zoom-in slide-in-from-top-4">
+                    <span className="text-xs font-black text-[var(--brand-primary)] px-3 uppercase tracking-tighter">{selectedIds.length} {t('common.selected')}</span>
 
-            {/* Resize Handle */}
-            {onResizeStart && (
-                <div
-                    className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize z-50 flex items-end justify-end p-1 group"
-                    onMouseDown={onResizeStart}
-                >
-                    <div className="w-2 h-2 border-r-2 border-b-2 border-gray-300 dark:border-gray-700 group-hover:border-indigo-500 transition-colors"></div>
+                    {deletingId === -1 ? (
+                        <div className="flex items-center gap-2 px-2 py-1 bg-red-50 dark:bg-red-900/10 rounded-xl">
+                            <span className="text-[10px] font-black uppercase text-red-600">{t('chat.alerts.confirm_bulk_delete', { count: selectedIds.length })}</span>
+                            <button onClick={confirmBulkDelete} className="px-3 py-1 bg-red-600 text-white text-[9px] font-black rounded-lg">{t('common.yes')}</button>
+                            <button onClick={() => setDeletingId(null)} className="px-3 py-1 bg-gray-200 dark:bg-gray-800 text-[9px] font-black rounded-lg text-gray-600">{t('common.no')}</button>
+                        </div>
+                    ) : (
+                        <button onClick={handleBulkDelete} className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all flex items-center gap-2">
+                            <Trash2 className="w-4 h-4" />
+                            <span className="text-[10px] font-black uppercase">{t('common.delete')}</span>
+                        </button>
+                    )}
+
+                    <button onClick={() => { setSelectedIds([]); setDeletingId(null); }} aria-label="Clear selection" className="p-2 hover:bg-gray-100 rounded-xl transition-all hover-premium">
+                        <X className="w-4 h-4 text-gray-400" />
+                    </button>
                 </div>
             )}
 
-            <Menu id={`${MESSAGE_MENU_ID}-${conversationId}`} className="dark:bg-gray-900 border dark:border-gray-800 shadow-2xl rounded-xl">
-                <Item onClick={({ props }) => onEdit(props.id, props.text)} className="text-xs font-bold dark:text-gray-300">
-                    <Edit3 className="w-4 h-4 mr-2" /> Modify Content
+            {/* INPUT */}
+            <div className="p-4 bg-gray-50/50 dark:bg-[var(--brand-surface)]/50 border-t dark:border-[var(--brand-border)] backdrop-blur-md">
+                <form
+                    onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+                    className="flex gap-2"
+                >
+                    <input
+                        type="text"
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        placeholder={t('chat.input_placeholder')}
+                        spellCheck={true}
+                        autoComplete="off"
+                        className="flex-1 bg-white dark:bg-[var(--brand-bg)] border dark:border-[var(--brand-border)] px-4 py-2.5 text-base rounded-xl focus:outline-none"
+                    />
+                    <button
+                        type="submit"
+                        aria-label="Send message"
+                        className="p-2.5 bg-brand-primary text-white rounded-xl shadow-lg shadow-brand-primary/20 hover-premium select-none disabled:opacity-50"
+                        style={{ backgroundColor: 'var(--brand-primary)' }}
+                        disabled={!inputValue.trim()}
+                    >
+                        <SendHorizontal className="w-5 h-5" />
+                    </button>
+                </form>
+                {onResizeStart && (
+                    <div className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize" onMouseDown={onResizeStart} title="Resize window" />
+                )}
+            </div>
+
+            <Menu id={`${MESSAGE_MENU_ID}-${conversationId}`} className="dark:bg-gray-900 border dark:border-gray-800">
+                <Item onClick={({ props }) => startEditing(props.id, props.text)} className="text-xs font-bold">
+                    <Edit3 className="w-4 h-4 mr-2" /> {t('common.edit')}
                 </Item>
                 <Separator />
-                <Item onClick={({ props }) => onDelete(props.id)} className="text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10">
-                    <Trash2 className="w-4 h-4 mr-2" /> Permanently Delete
+                <Item onClick={({ props }) => setDeletingId(props.id)} className="text-xs font-bold text-red-500">
+                    <Trash2 className="w-4 h-4 mr-2" /> {t('common.delete')}
                 </Item>
             </Menu>
         </div>
@@ -278,5 +373,4 @@ const ChatWindow = memo(({
 });
 
 ChatWindow.displayName = "ChatWindow";
-
 export default ChatWindow;

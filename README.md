@@ -15,6 +15,37 @@ It is designed for B2B environments where customer interactions must comply with
 - Enforce deterministic **Guardrail logic** distinguishing *security violations* from *business out-of-scope* topics.
 - Provide real-time HITL oversight for pending AI-generated responses.
 - Surface rich observability data (latency, confidence, violation counts, and token metrics).
+- **Hybrid Configuration Model:** Supports environment-variable defaults with runtime database overrides for zero-downtime reconfiguration.
+
+---
+
+## 🎨 Dynamic Branding & Theming
+
+The system features a **Semantic Branding Engine** that allows complete white-labeling without code changes.
+
+- **Semantic Variables:** The UI uses abstract tokens like `--brand-primary`, `--brand-surface`, and `--brand-bg` instead of hardcoded colors.
+- **Runtime Customization:** Admins can configure the `Primary Color`, `Border Radius`, and `UI Density` directly from the Admin Panel.
+- **Dark Mode Native:** The system is built "Dark Mode First" but supports full theming capabilities.
+
+---
+
+## 🔧 Configuration
+
+The application uses a **Hybrid Configuration Model** with the following precedence order:
+1. **DB Override** (Highest Priority): Settings saved via the Admin UI.
+2. **Environment Variable**: Fallback defaults if no DB config exists.
+3. **Hardcoded Default**: Final safety net.
+
+### Key Environment Variables
+
+| Variable | Scope | Description | Default |
+|----------|-------|-------------|---------|
+| `VITE_API_URL` | Frontend | Base URL for the API. **Must be accessible by the client browser.** | `http://localhost:8000` |
+| `OPENAI_API_BASE` | Backend | Default LLM endpoint URL. | `http://localhost:1234/v1` |
+| `DEFAULT_PRIMARY_COLOR` | Backend | Default primary brand color (Hex). | `#2563eb` |
+| `ALLOWED_ORIGINS` | Backend | CORS allowed origins (comma-separated). | `http://localhost:5173` |
+
+> **Pro Tip:** When deploying with Docker, ensure `VITE_API_URL` points to the public address/IP of your server, not `localhost` or the internal Docker network IP, as the frontend code runs in the *user's browser*.
 
 ---
 
@@ -113,9 +144,31 @@ class SecurityAudit(Base):
 
 ---
 
-## 🚀 Getting Started
+## 🐋 Easy Run with Docker
 
-### Backend Setup
+The easiest way to run the entire system (including Redis) is using Docker Compose.
+
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
+
+### 🚀 Starting the Project
+Run the following command in the root directory:
+```bash
+docker compose up -d --build
+```
+
+### 📂 Accessing the Services
+- **Dashboard (Frontend)**: [http://localhost:5173](http://localhost:5173)
+- **API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+### 🛑 Stopping the Project
+```bash
+docker compose down
+```
+
+---
+
+## 🚀 Manual Local Setup (Development)
 ```bash
 cd server
 python -m venv venv
@@ -162,6 +215,15 @@ API Keys and sensitive configuration are now managed via the Database/Admin API,
 
 ## 🧩 **ARCHITECTURE.md — Data Flow and System Design**
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for sequence diagrams and detailed data flow analysis.
+
+---
+
+## 📈 Engineering Audit & Standards
+This repository underwent a full security and architectural audit (v1.3 stabilization).
+- **Status:** 🟢 Production Ready
+- **Security:** Deterministic Guardrail enforcement (Zero-Echo)
+- **Compliance:** Full interaction audit trails and locked configuration snapshots.
+- **Next Roadmap:** Focus on Enterprise scaling (PostgreSQL) and WebSocket heartbeats.
 
 ---
 

@@ -43,24 +43,24 @@ export const SnapshotsTab = ({
                     <Archive className="w-6 h-6 text-amber-500" /> {t('admin.sections.config_history')}
                 </h2>
                 <p className="text-sm text-gray-500 mt-2 mb-8">
-                    Gestiona versiones de configuración. Las versiones bloqueadas no pueden ser eliminadas.
+                    {t('admin.snapshots.desc')}
                 </p>
 
                 <div className="space-y-3">
-                    {snapshots.length === 0 && (
+                    {(snapshots || []).length === 0 && (
                         <div className="text-center py-20 text-gray-400 border-2 border-dashed rounded-3xl dark:border-gray-800">
                             <Archive className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                            <p className="font-bold">No hay historial disponible</p>
-                            <p className="text-xs mt-2">Guarda cambios para crear versiones automáticas</p>
+                            <p className="font-bold">{t('admin.snapshots.empty_title')}</p>
+                            <p className="text-xs mt-2">{t('admin.snapshots.empty_desc')}</p>
                         </div>
                     )}
 
-                    {snapshots.map((ss) => (
+                    {(snapshots || []).map((ss) => (
                         <div
                             key={ss.id}
                             className={`flex items-center justify-between p-5 rounded-3xl border transition-all group ${ss.is_locked
-                                    ? "bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800"
-                                    : "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:border-blue-300 dark:hover:border-blue-700"
+                                ? "bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800"
+                                : "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:border-blue-300 dark:hover:border-blue-700"
                                 }`}
                         >
                             <div className="flex items-center gap-4 flex-1">
@@ -87,7 +87,7 @@ export const SnapshotsTab = ({
                                             {ss.version_name || ss.version_label}
                                             {ss.is_locked && (
                                                 <span className="bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
-                                                    Protegido
+                                                    {t('admin.snapshots.protected')}
                                                 </span>
                                             )}
                                         </p>
@@ -103,7 +103,7 @@ export const SnapshotsTab = ({
                                     <button
                                         onClick={() => startEdit(ss)}
                                         className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-xl transition-colors opacity-0 group-hover:opacity-100"
-                                        title="Renombrar"
+                                        title={t('admin.snapshots.rename_title')}
                                     >
                                         <Edit2 className="w-4 h-4 text-blue-600" />
                                     </button>
@@ -113,7 +113,7 @@ export const SnapshotsTab = ({
                                     <button
                                         onClick={() => onToggleLock(ss.id)}
                                         className="p-2 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-xl transition-colors"
-                                        title={ss.is_locked ? "Desbloquear" : "Bloquear"}
+                                        title={ss.is_locked ? t('admin.snapshots.unlock_title') : t('admin.snapshots.lock_title')}
                                     >
                                         {ss.is_locked ? (
                                             <Unlock className="w-4 h-4 text-amber-600" />
@@ -136,7 +136,7 @@ export const SnapshotsTab = ({
                                     <button
                                         onClick={() => onDelete(ss.id)}
                                         className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-xl transition-colors opacity-0 group-hover:opacity-100"
-                                        title="Eliminar"
+                                        title={t('admin.snapshots.delete_title')}
                                     >
                                         <Trash2 className="w-4 h-4 text-red-600" />
                                     </button>
@@ -150,20 +150,20 @@ export const SnapshotsTab = ({
             {/* Professional Guidance Card */}
             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 p-6 rounded-3xl border border-blue-200 dark:border-blue-900">
                 <h3 className="text-sm font-black text-blue-900 dark:text-blue-100 uppercase tracking-widest mb-3">
-                    💼 Gestión Profesional de Versiones
+                    💼 {t('admin.snapshots.guidance_title')}
                 </h3>
                 <ul className="space-y-2 text-xs text-blue-800 dark:text-blue-200">
                     <li className="flex items-start gap-2">
                         <span className="text-blue-500 font-black">•</span>
-                        <span><strong>Bloquear:</strong> Protege versiones críticas de eliminación accidental</span>
+                        <span>{t('admin.snapshots.guidance_lock')}</span>
                     </li>
                     <li className="flex items-start gap-2">
                         <span className="text-blue-500 font-black">•</span>
-                        <span><strong>Renombrar:</strong> Etiqueta versiones con nombres descriptivos (ej: "Compliance v2.1")</span>
+                        <span>{t('admin.snapshots.guidance_rename')}</span>
                     </li>
                     <li className="flex items-start gap-2">
                         <span className="text-blue-500 font-black">•</span>
-                        <span><strong>Rollback:</strong> Restaura configuraciones anteriores en caso de error</span>
+                        <span>{t('admin.snapshots.guidance_rollback')}</span>
                     </li>
                 </ul>
             </div>

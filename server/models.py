@@ -2,6 +2,8 @@ from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Bool
 from sqlalchemy.orm import relationship
 from database import Base
 import datetime
+from datetime import timezone
+import os
 
 class Client(Base):
     __tablename__ = "clients"
@@ -9,7 +11,8 @@ class Client(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, default="Unknown")
     phone_number = Column(String, unique=True, index=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    tenant_id = Column(String, default="default", index=True)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     conversations = relationship("Conversation", back_populates="client")
 
@@ -19,10 +22,12 @@ class Conversation(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     client_id = Column(Integer, ForeignKey("clients.id"))
-    started_at = Column(DateTime, default=datetime.datetime.utcnow)
+    started_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     is_active = Column(Boolean, default=True)
     is_archived = Column(Boolean, default=False)
     is_pinned = Column(Boolean, default=False)
+    auto_ai_enabled = Column(Boolean, default=True) # Manual override for HITL
+    tenant_id = Column(String, default="default", index=True)
 
     client = relationship("Client", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation")
@@ -35,11 +40,18 @@ class Message(Base):
     conversation_id = Column(Integer, ForeignKey("conversations.id"))
     sender = Column(String) # "user" (client), "agent" (AI), "system"
     content = Column(Text)
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     status = Column(String, default="sent") # pending, sent, delivered, failed
     is_ai_generated = Column(Boolean, default=False)
     confidence = Column(Integer, default=0) # 0-100
+    is_violation = Column(Boolean, default=False)
     metadata_json = Column(Text, default="{}") # Stores intent, tone, reasoning in JSON format
+    external_id = Column(String, unique=True, nullable=True, index=True) # WhatsApp Message ID (wamid)
+    tenant_id = Column(String, default="default", index=True)
+    
+    # Media Support (Added v11)
+    media_url = Column(String, nullable=True)
+    media_type = Column(String, nullable=True) # "image", "pdf", "video"
     
     conversation = relationship("Conversation", back_populates="messages")
 
@@ -79,16 +91,20 @@ class AIConfig(Base):
     
     # Secrets & Integrations (Added v8)
     openai_api_key = Column(String, nullable=True) # Defaults to None (use env or empty)
-    openai_api_base = Column(String, default="http://localhost:1234/v1")
+    openai_api_base = Column(String, default=os.getenv("OPENAI_API_BASE", "http://localhost:1234/v1"))
     whatsapp_api_token = Column(String, nullable=True)
     whatsapp_verify_token = Column(String, nullable=True)
+    whatsapp_phone_id = Column(String, nullable=True)
+    whatsapp_driver = Column(String, default="mock") # "mock" or "meta"
     
     # Global Settings
     timezone = Column(String, default="UTC") # e.g. "America/Costa_Rica"
     workspace_config = Column(String, default="{}") # JSON storage for UI layout preferences
+    suggestions_json = Column(Text, default="[]") # Global quick-reply templates
+    tenant_id = Column(String, default="default", index=True)
     
     is_active = Column(Boolean, default=True)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
 
 
 class SecurityAudit(Base):
@@ -105,9 +121,10 @@ class SecurityAudit(Base):
     model_name = Column(String)
     tokens_used = Column(Integer)
     status = Column(String) # "Passed", "Blocked", "Latency_Violation"
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     reasoning = Column(Text)
     triggered_keywords = Column(Text) # JSON list
+    tenant_id = Column(String, default="default", index=True)
 
 
 class AIDataset(Base):
@@ -118,7 +135,8 @@ class AIDataset(Base):
     data_type = Column(String) # "csv", "json", "api", "sql"
     content = Column(Text) # Raw data or configuration URI
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    tenant_id = Column(String, default="default", index=True)
 
 
 class AIConfigSnapshot(Base):
@@ -145,6 +163,10 @@ class AIConfigSnapshot(Base):
     fallback_message = Column(Text)
     preferred_model = Column(String)
     
+    # Snapshot WhatsApp Integration
+    whatsapp_driver = Column(String, default="mock")
+    whatsapp_phone_id = Column(String, nullable=True)
+    
     # Snapshot Branding
     logo_url = Column(String, nullable=True)
     primary_color = Column(String)
@@ -152,6 +174,32 @@ class AIConfigSnapshot(Base):
     # Advanced Version Management
     version_name = Column(String, nullable=True)
     is_locked = Column(Boolean, default=False)
+    tenant_id = Column(String, default="default", index=True)
     
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     version_label = Column(String, nullable=True) # DEPRECATED: use version_name
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    role = Column(String, default="operator") # "admin" or "operator"
+    is_active = Column(Boolean, default=True)
+    tenant_id = Column(String, default="default", index=True)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    action = Column(String) # e.g. "APPROVE_MESSAGE", "EDIT_CONFIG"
+    resource = Column(String) # e.g. "Message 123", "AIConfig"
+    details = Column(Text, nullable=True) # JSON or descriptive text
+    
+    user = relationship("User")

@@ -30,3 +30,18 @@ MANUAL_REVIEWS_TOTAL = Counter(
     "manual_reviews_total",
     "Total messages queued for manual human review"
 )
+
+MESSAGE_APPROVALS_TOTAL = Counter(
+    "message_approvals_total",
+    "Total number of AI messages approved by humans"
+)
+
+MESSAGE_REJECTIONS_TOTAL = Counter(
+    "message_rejections_total",
+    "Total number of AI messages rejected by humans"
+)
+
+HUMAN_MESSAGES_TOTAL = Counter(
+    "human_messages_total",
+    "Total number of messages sent manually by humans"
+)

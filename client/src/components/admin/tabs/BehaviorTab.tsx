@@ -21,11 +21,11 @@ export const BehaviorTab = ({ config, setConfig }: Props) => {
                     <Sliders className="w-5 h-5 text-blue-500" /> {t('admin.sections.operational_rules')}
                 </h2>
                 <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                    {config.rules.map((rule, i) => (
+                    {(config.rules || []).map((rule, i) => (
                         <div key={i} className="flex items-start justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl group transition-all hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm border dark:border-gray-700">
                             <span className="text-sm dark:text-gray-300 leading-relaxed break-words flex-1 pr-4">{rule}</span>
                             <button
-                                onClick={() => setConfig({ ...config, rules: config.rules.filter((_, idx) => idx !== i) })}
+                                onClick={() => setConfig({ ...config, rules: (config.rules || []).filter((_, idx) => idx !== i) })}
                                 className="opacity-0 group-hover:opacity-100 text-red-500 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-opacity flex-shrink-0"
                             >
                                 <X className="w-4 h-4" />
@@ -42,7 +42,7 @@ export const BehaviorTab = ({ config, setConfig }: Props) => {
                         placeholder={t('admin.fields.operational_rules_placeholder')}
                     />
                     <button
-                        onClick={() => { if (newRule) { setConfig({ ...config, rules: [...config.rules, newRule] }); setNewRule(""); } }}
+                        onClick={() => { if (newRule) { setConfig({ ...config, rules: [...(config.rules || []), newRule] }); setNewRule(""); } }}
                         className="p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-lg transition-transform active:scale-95"
                     >
                         <Plus className="w-5 h-5" />

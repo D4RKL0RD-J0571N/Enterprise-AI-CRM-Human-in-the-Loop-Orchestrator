@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { API_ENDPOINTS } from "../lib/api";
 
 interface BrandingConfig {
     business_name?: string;
@@ -40,7 +41,7 @@ export function useBranding() {
 
     const refreshBranding = useCallback(async () => {
         try {
-            const res = await fetch("http://localhost:8000/admin/config");
+            const res = await fetch(API_ENDPOINTS.admin.config);
             if (res.ok) {
                 const data = await res.json();
                 setConfig(data);

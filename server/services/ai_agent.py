@@ -4,11 +4,18 @@ import json
 import time
 import asyncio
 from datetime import datetime
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 from logger import setup_logger
 from models import AIConfig, AIDataset, Message, SecurityAudit
 from routers.websocket import manager
 from guardrail.engine import GuardrailEngine
+from services.encryption import decrypt_string
+from services.metrics import (
+    AI_REQUESTS_TOTAL, SECURITY_VIOLATIONS_TOTAL, 
+    REQUEST_LATENCY_MS, TOKENS_USED_TOTAL, MANUAL_REVIEWS_TOTAL
+)
 
 logger = setup_logger("ai_agent")
 
@@ -19,25 +26,17 @@ logger = setup_logger("ai_agent")
 class AIAgent:
     def __init__(self):
         self.context = {}
-    
-    def __init__(self):
-        self.context = {}
 
-    def _get_active_config(self, db):
-        config = db.query(AIConfig).filter(AIConfig.is_active == True).first()
+    async def _get_active_config(self, db: AsyncSession):
+        if not db:
+            return self._default_config()
+            
+        result = await db.execute(select(AIConfig).filter(AIConfig.is_active == True))
+        config = result.scalars().first()
+        
         if not config:
-            return {
-                "business_name": "Unconfigured Agent",
-                "business_description": "This AI agent has not been configured yet.",
-                "tone": "neutral",
-                "rules": [],
-                "auto_respond_threshold": 100,
-                "review_threshold": 0,
-                "forbidden_topics": [],
-                "intent_rules": [],
-                "fallback_message": "I am not configured yet. Please go to the Admin panel to set up my identity and rules.",
-                "is_configured": False
-            }
+            return self._default_config()
+
         return {
             "business_name": config.business_name,
             "business_description": config.business_description,
@@ -53,10 +52,29 @@ class AIAgent:
             "intent_rules": json.loads(config.intent_rules_json),
             "fallback_message": config.fallback_message,
             "preferred_model": config.preferred_model,
-            "openai_api_key": config.openai_api_key,
+            "openai_api_key": decrypt_string(config.openai_api_key),
             "openai_api_base": config.openai_api_base,
-            "whatsapp_api_token": config.whatsapp_api_token,
+            "whatsapp_api_token": decrypt_string(config.whatsapp_api_token),
+            "whatsapp_phone_id": config.whatsapp_phone_id,
+            "whatsapp_driver": config.whatsapp_driver or "mock",
+            "suggestions_json": json.loads(config.suggestions_json or "[]"),
             "is_configured": True
+        }
+
+    def _default_config(self):
+        return {
+            "business_name": "Unconfigured Agent",
+            "business_description": "This AI agent has not been configured yet.",
+            "tone": "neutral",
+            "rules": [],
+            "auto_respond_threshold": 100,
+            "review_threshold": 0,
+            "forbidden_topics": [],
+            "intent_rules": [],
+            "fallback_message": "I am not configured yet. Please go to the Admin panel to set up my identity and rules.",
+            "openai_api_base": os.getenv("OPENAI_API_BASE", "http://localhost:1234/v1"),
+            "preferred_model": "gpt-4-turbo",
+            "is_configured": False
         }
 
 
@@ -85,12 +103,12 @@ class AIAgent:
         
         return intent_context
 
-    def generate_response(self, client_id, user_message, db=None):
+    async def generate_response(self, client_id, user_message, db: AsyncSession = None):
         start_time = time.time()
         logger.debug(f"Generating response for Client {client_id}: {user_message[:50]}...")
         
         # 1. Fetch Config
-        config = self._get_active_config(db) if db else self._get_active_config(None)
+        config = await self._get_active_config(db)
         
         if not config.get("is_configured", True):
             return {
@@ -106,9 +124,11 @@ class AIAgent:
         trigger_type = guardrail_result.classification if guardrail_result.classification != "in_scope" else None
         triggered_keywords = guardrail_result.triggered_keywords
         
-        # 3. Construct Knowledge Base Context
-        from models import AIDataset
-        datasets = db.query(AIDataset).filter(AIDataset.is_active == True).all() if db else []
+        if db:
+            result = await db.execute(select(AIDataset).filter(AIDataset.is_active == True))
+            datasets = result.scalars().all()
+        else:
+            datasets = []
         knowledge_texts = []
         if datasets:
             for ds in datasets:
@@ -225,20 +245,30 @@ class AIAgent:
                     "metadata": {"intent": "system_error", "reasoning": "Missing API Key"}
                 }
         
-        # Apply Configuration
-        if config.get("openai_api_key"):
-            openai.api_key = config["openai_api_key"]
-        if config.get("openai_api_base"):
-            openai.api_base = config["openai_api_base"]
-
         try:
-            # 9. LLM Call
+            # 9. LLM Call (Non-blocking acreate)
             preferred_model = config.get("preferred_model", "gpt-4-turbo")
-            response = openai.ChatCompletion.create(
+            
+            # Use provided keys or fall back to global
+            api_key = config.get("openai_api_key") or openai.api_key
+            api_base = config.get("openai_api_base") or openai.api_base
+
+            # Docker networking fix: 
+            # If running in Docker and pointing to localhost, use host.docker.internal instead
+            if api_base:
+                is_local = "localhost" in api_base or "127.0.0.1" in api_base
+                # We can detect docker by env var or presence of /.dockerenv
+                if is_local and (os.path.exists("/.dockerenv") or os.getenv("RUNNING_IN_DOCKER") == "true"):
+                    api_base = api_base.replace("localhost", "host.docker.internal").replace("127.0.0.1", "host.docker.internal")
+                    logger.info(f"Docker Network Fix: Translated API base to {api_base}")
+
+            response = await openai.ChatCompletion.acreate(
                 model=preferred_model, 
                 messages=messages,
-                temperature=0.3,  # Slightly higher for natural responses
-                request_timeout=8
+                temperature=0.3, 
+                api_key=api_key,
+                api_base=api_base,
+                request_timeout=60 # Increased for local LLM inference
             )
             
             content = response.choices[0].message["content"]
@@ -333,11 +363,6 @@ class AIAgent:
                 audit_status = "Latency_Violation"
 
             # Prometheus Metrics Recording
-            from services.metrics import (
-                AI_REQUESTS_TOTAL, SECURITY_VIOLATIONS_TOTAL, 
-                REQUEST_LATENCY_MS, TOKENS_USED_TOTAL, MANUAL_REVIEWS_TOTAL
-            )
-            
             AI_REQUESTS_TOTAL.labels(
                 status=audit_status, 
                 domain=domain, 
@@ -348,7 +373,7 @@ class AIAgent:
             
             if tokens_used > 0:
                 TOKENS_USED_TOTAL.labels(model=preferred_model).inc()
-            
+
             if intent == "Security_Violation":
                 SECURITY_VIOLATIONS_TOTAL.labels(type=classification).inc()
                 
@@ -371,31 +396,44 @@ class AIAgent:
                     triggered_keywords=json.dumps(triggered_keywords)
                 )
                 db.add(audit)
-                db.commit()
+                await db.commit()
 
             # 12. Security Alert (Only for actual violations)
             if classification in ["security_violation", "legal_violation", "medical_violation"]:
                 try:
                     alert_data = {
-                        "event": "security_alert",
-                        "message": f"Security Violation: {classification}",
-                        "reason": reasoning,
-                        "phone": client_id
+                        "type": "security_alert",
+                        "reason": f"Security Violation: {classification}",
+                        "details": reasoning,
+                        "phone": client_id,
+                        "timestamp": time.time()
                     }
-                    try:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            asyncio.run_coroutine_threadsafe(manager.broadcast(alert_data), loop)
-                        else:
-                            asyncio.run(manager.broadcast(alert_data))
-                    except:
-                        pass
-                    
+                    await manager.broadcast(json.dumps(alert_data))
                     logger.warning(f"SECURITY ALERT: {classification} for {client_id}")
                 except Exception as ex:
                     logger.error(f"Failed to broadcast security alert: {ex}")
 
-            # 13. Update Context
+            # 13. Map Suggested Replies (Smart Templates)
+            suggested_replies = []
+            
+            # A. Intent-specific suggestions
+            intent_rules = config.get("intent_rules", [])
+            for rule in intent_rules:
+                if rule.get("intent") == intent:
+                    rule_suggestions = rule.get("suggestions")
+                    if isinstance(rule_suggestions, list):
+                        suggested_replies.extend(rule_suggestions)
+                    break
+            
+            # B. Global suggestions (Fallback)
+            global_suggestions = config.get("suggestions_json", [])
+            if not suggested_replies and global_suggestions:
+                suggested_replies.extend(global_suggestions)
+                
+            # C. CX Suggestions (Sentiment based)
+            # (Future: can add logic here for complaint specific templates)
+
+            # 14. Update Context
             self.context[client_id] = history + [("user", user_message), ("assistant", reply_text)]
             
             logger.info(f"AI Response | Intent: {intent} | Classification: {classification} | Confidence: {confidence_score}% | Latency: {latency_ms}ms")
@@ -415,7 +453,8 @@ class AIAgent:
                     "triggered_keywords": triggered_keywords,
                     "tone": tone_applied,
                     "domain": domain,
-                    "is_out_of_knowledge": is_out_of_kb
+                    "is_out_of_knowledge": is_out_of_kb,
+                    "suggested_replies": suggested_replies
                 }
             }
 
@@ -434,7 +473,7 @@ class AIAgent:
                     reasoning=str(e)
                 )
                 db.add(audit)
-                db.commit()
+                await db.commit()
                 
             return {
                 "content": fallback_msg,

@@ -24,7 +24,7 @@ export const IdentityTab = ({ config, setConfig }: Props) => {
                             value={config.business_name}
                             onChange={(e) => setConfig({ ...config, business_name: e.target.value })}
                             className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 dark:text-white outline-none"
-                            placeholder="e.g. FreshDrive Costa Rica"
+                            placeholder={t('admin.fields.business_name_placeholder')}
                         />
                     </div>
                     <div className="space-y-2">
@@ -80,8 +80,8 @@ export const IdentityTab = ({ config, setConfig }: Props) => {
                                 onChange={(e) => setConfig({ ...config, language_code: e.target.value })}
                                 className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 dark:text-white outline-none"
                             >
-                                <option value="es-CR">Spanish (Costa Rica)</option>
-                                <option value="en-US">English (US)</option>
+                                <option value="es-CR">{t('admin.languages.spanish')}</option>
+                                <option value="en-US">{t('admin.languages.english')}</option>
                             </select>
                         </div>
                         <div className="flex flex-col justify-center">

@@ -10,7 +10,7 @@ export interface AIConfig {
     translate_messages: boolean;
     identity_prompt: string | null;
     grounding_template: string | null;
-    intent_rules: { keywords: string[], intent: string }[];
+    intent_rules: { keywords: string[], intent: string, suggestions?: string[] }[];
     fallback_message: string;
     preferred_model: string;
     logo_url: string | null;
@@ -22,7 +22,11 @@ export interface AIConfig {
     openai_api_base?: string;
     whatsapp_api_token?: string;
     whatsapp_verify_token?: string;
+    whatsapp_phone_id?: string;
+    whatsapp_driver?: 'mock' | 'meta';
     timezone: string;
+    suggestions_json?: string[]; // Global suggestions
+    workspace_config?: any; // JSON storage for UI layout preferences
 }
 
 export interface SecurityAudit {
@@ -63,4 +67,14 @@ export interface AIDataset {
 export interface AnalyticsItem {
     intent: string;
     count: number;
+}
+
+export interface AuditLogItem {
+    id: number;
+    timestamp: string;
+    action: string;
+    resource: string;
+    details: string;
+    user_id: number;
+    user?: { username: string };
 }

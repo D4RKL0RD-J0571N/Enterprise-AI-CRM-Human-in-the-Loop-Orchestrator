@@ -1,5 +1,168 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
+@variant dark (&:where(.dark, .dark *));
 
-/* Custom scrollbar for chat window if needed */
+@layer base {
+    body {
+        background-color: #ffffff;
+        /* Default light background */
+    }
+}
+
+@layer base {
+    :root {
+        --brand-primary: #2563eb;
+        --brand-primary-rgb: 37, 99, 235;
+        --brand-primary-muted: rgba(var(--brand-primary-rgb), 0.1);
+        --brand-primary-border: rgba(var(--brand-primary-rgb), 0.3);
+        --brand-secondary: #6366f1;
+        --brand-radius: 12px;
+        --brand-bg: #030712;
+        --brand-surface: #0f172a;
+        --brand-border: rgba(255, 255, 255, 0.1);
+        --brand-text-on-primary: #ffffff;
+        --brand-bubble-ai: var(--brand-primary);
+        --brand-bubble-client: #f3f4f6;
+        --brand-bubble-client-dark: var(--brand-surface);
+        --brand-muted: #64748b;
+
+        /* Motion & Interactivity */
+        --transition-immediate: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+        --transition-standard: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    html {
+        -webkit-text-size-adjust: 100%;
+        scroll-behavior: smooth;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+    }
+
+    body {
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        overflow-x: hidden;
+    }
+
+    /* Selection styles */
+    ::selection {
+        background-color: var(--brand-primary-muted);
+        color: var(--brand-primary);
+    }
+
+    /* Input focus resets */
+    input:focus,
+    textarea:focus,
+    select:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px white, 0 0 0 4px var(--brand-primary);
+    }
+
+    .dark input:focus,
+    .dark textarea:focus,
+    .dark select:focus {
+        box-shadow: 0 0 0 2px var(--brand-bg), 0 0 0 4px var(--brand-primary);
+    }
+
+    /* Disable iOS tap highlight */
+    * {
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Tabular figures for data/timers */
+    .tabular-nums {
+        font-variant-numeric: tabular-nums;
+    }
+
+    .text-brand-primary {
+        color: var(--brand-primary);
+    }
+
+    .bg-brand-primary {
+        background-color: var(--brand-primary);
+    }
+
+    .border-brand-primary {
+        border-color: var(--brand-primary);
+    }
+
+    .brand-rounded {
+        border-radius: var(--brand-radius);
+    }
+}
+
+/* Utilities */
+@layer utilities {
+    .transition-premium {
+        transition-duration: 200ms;
+        transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .no-select {
+        user-select: none;
+    }
+
+    .pointer-events-none-children * {
+        pointer-events: none;
+    }
+}
+
+.ui-density-compact {
+    --density-p: 1.25rem;
+    --density-gap: 0.5rem;
+    --density-radius-offset: -4px;
+}
+
+.ui-density-comfortable {
+    --density-p: 2rem;
+    --density-gap: 1.5rem;
+    --density-radius-offset: 0px;
+}
+
+.dark body {
+    background-color: var(--brand-bg);
+}
+
+.transition-colors {
+    transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+        color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Hover effects only for devices that support hover */
+@media (hover: hover) {
+    .hover-premium:hover {
+        opacity: 0.85;
+        transform: scale(0.98);
+        transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+}
+
+/* Custom scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(156, 163, 175, 0.3);
+    border-radius: 20px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: var(--brand-primary-muted);
+}
+
+/* Hide scrollbar for the infinite canvas */
+.infinite-canvas::-webkit-scrollbar {
+    display: none;
+}
+
+.infinite-canvas {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}

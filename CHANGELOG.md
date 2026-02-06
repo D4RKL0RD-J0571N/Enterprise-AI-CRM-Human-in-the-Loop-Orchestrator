@@ -2,62 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.0.0] - 2026-01-17
+## [Unreleased] - 2026-02-06
 
-### Added
-- **Conversation Management**:
-  - Right-click Context Menus for Sidebar (Pin, Archive) and Messages (Copy, Delete, Edit).
-  - Backend API endpoints for Pin/Unpin and Archive/Unarchive.
-  - Database schema migration (v3) adding `is_archived` and `is_pinned` columns.
-- **AI Metadata & HITL**:
-  - Frontend display for AI Intent, Confidence Score, and Reasoning.
-  - "AI is thinking..." visual indicator during generation.
-  - Backend logic to analyze and store metadata for every AI response.
-- **UI Improvements**:
-  - Optimistic UI updates for instant "Approve/Reject" feedback.
-  - Trash icon on hover for message deletion.
-  - Timestamp formatting and sender differentiation.
-  - Fully functional Dark/Light mode toggle.
+### 🚀 Major Features
+- **Dynamic Semantic Branding**: Introduced a comprehensive theming engine allowing runtime customization of primary colors, border radii, and UI density without code changes.
+- **Centralized API Configuration**: Refactored frontend to use a single `api.ts` source of truth, eliminating scattered hardcoded URLs.
+- **Hybrid Configuration Model**: Backend now supports environment variable defaults (`OPENAI_API_BASE`, `DEFAULT_PRIMARY_COLOR`) with database-level overrides.
 
-### Changed
-- Refactored `ChatDashboard.tsx` to include `InfoPanel` and `Sidebar` components.
-- Updated database schema (v2) to include `confidence` and `metadata_json` in messages.
-- Moved `Sidebar` logic to its own component with auto-refresh polling.
+### 🛠️ Improvements
+- **Environment Hardening**: 
+  - Externalized critical backend configurations to `os.getenv`.
+  - Added `VITE_API_URL` support for flexible frontend deployment.
+- **UI/UX Polish**:
+  - Integrated branding tokens into all major components (ChatDashboard, Sidebar, Login).
+  - Added missing translations for "Node Registry" and connection status indicators.
+  - Enhanced generic "Admin" UI components to be theme-aware.
 
-### Fixed
-- Fixed bug where new messages were overwriting old ones due to missing ID broadcast.
-- Fixed stale state issues where "Approve" button wouldn't update UI until refresh.
-- Resolved TypeScript errors and syntax issues in Sidebar and Dashboard components.
+### 🐛 Bug Fixes
+- Fixed hardcoded `localhost` references in `server/routers/admin.py` and `server/services/ai_agent.py`.
+- Resolved linting warnings in `BrandingContext.tsx` regarding unused variables.
+- Fixed inconsistent dark mode rendering in the Sidebar and Chat Window.
 
----
-
-## [0.2.0] - Prior to 2026-01-17
-
-### Added
-- **Visual Identity**:
-  - Implemented Glassmorphism design system with Tailwind CSS.
-  - Added Dark/Light mode theme engine using CSS variables and React state.
-- **AI Core**:
-  - Integrated Local LLM support via OpenAI-compatible endpoint (LM Studio).
-  - Implemented System Prompts and basic conversation memory.
-- **Operator Dashboard**:
-  - Created the first iteration of the ChatDashboard with message bubbles and input field.
-  - Side-panel for client listing (initial static data).
-
-### Changed
-- Migrated from vanilla CSS to localized component-based styles.
-
-## [0.1.0] - Project Inception
-
-### Added
-- **Infrastructure**:
-  - Core FastAPI server setup with Uvicorn.
-  - SQLite database integration with SQLAlchemy ORM.
-  - Initial database schema: `Client`, `Conversation`, `Message`.
-- **Real-time Engine**:
-  - WebSocket Manager for broadcasting messages to multiple frontend instances.
-- **WhatsApp Webhook Simulation**:
-  - Endpoint for receiving/simulating external messages from WhatsApp.
-- **Frontend Skeleton**:
-  - Vite + React + TypeScript boilerplate.
-  - Basic routing and workspace structure.
+### 📦 CI/CD
+- Added GitHub Actions workflow (`ci.yml`) for automated Backend (Pytest) and Frontend (Vite Build) verification.

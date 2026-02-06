@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { ShieldAlert, Sun, Moon, Layout, Grid2X2, LayoutGrid, Monitor } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Sun, Moon, Grid2X2, LayoutGrid, Monitor, Layout as LayoutIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "../context/AuthContext";
+import { useBrandingContext } from "../context/BrandingContext";
 import Sidebar from "./Sidebar";
 import InfoPanel from "./InfoPanel";
 import ChatWindow from "./ChatWindow";
-import SimulateWebhookModal from "./SimulateWebhookModal";
+import { API_ENDPOINTS, WS_BASE_URL } from "../lib/api";
 
 interface ChatDashboardProps {
     onNavigate?: (view: "chat" | "admin") => void;
@@ -24,42 +26,130 @@ interface ChatSession {
         height: number;
         zIndex: number;
     };
+    autoAIEnabled?: boolean;
+    phone?: string;
 }
 
 export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
     const { t } = useTranslation();
+    const { token, isAdmin, logout, user } = useAuth();
     const [sessions, setSessions] = useState<ChatSession[]>([]);
 
     const [conversations, setConversations] = useState<any[]>([]);
-    const lastSyncRef = useRef<{ [key: number]: string }>({});
-    const hydrationLock = useRef(new Set<number>());
+
     const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
     const activeSession = sessions.find(s => s.conversationId === activeConversationId) || null;
 
     const activeClientName = activeSession?.clientName || t('chat.select_client');
     const activeClientPhone = activeSession?.clientPhone || "";
 
-    const [isDarkMode, setIsDarkMode] = useState(() => {
-        if (typeof window !== "undefined") {
-            return localStorage.getItem("theme") === "dark" ||
-                (!localStorage.getItem("theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
-        }
-        return false;
-    });
+    const { config, isDarkMode, toggleDarkMode } = useBrandingContext();
 
-    const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
-    const [securityAlert, setSecurityAlert] = useState<{ show: boolean; message: string; reason: string } | null>(null);
-    const ws = useRef<WebSocket | null>(null);
-    const activePhoneRef = useRef<string>("");
+
 
     const [layoutMode, setLayoutMode] = useState<"focus" | "canvas">("canvas");
     const maxZIndex = useRef(100);
     const canvasRef = useRef<HTMLDivElement>(null);
+    const [retryCount, setRetryCount] = useState(0);
+    const [isPollingMode, setIsPollingMode] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
+
     const [draggingId, setDraggingId] = useState<number | null>(null);
     const [resizingId, setResizingId] = useState<number | null>(null);
     const dragOffset = useRef({ x: 0, y: 0 });
+    const [isPanning, setIsPanning] = useState(false);
+    const panStart = useRef({ x: 0, y: 0 });
 
-    // PERSISTENCE: Save Workspace Config
+    // New Chat Modal State
+    const [isNewChatOpen, setIsNewChatOpen] = useState(false);
+    const [newChatPhone, setNewChatPhone] = useState("");
+    const [newChatName, setNewChatName] = useState("");
+
+    const sessionsRef = useRef(sessions);
+    useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
+
+    // RESTORE: Load Workspace Config & Sessions
+    useEffect(() => {
+        const savedLayout = localStorage.getItem("workspace_layout");
+        if (savedLayout) {
+            try {
+                const parsed = JSON.parse(savedLayout);
+                if (parsed.sessions) setSessions(parsed.sessions);
+                if (parsed.layoutMode) setLayoutMode(parsed.layoutMode);
+                if (parsed.activeConversationId) setActiveConversationId(parsed.activeConversationId);
+            } catch (e) { console.error("Failed to restore layout", e); }
+        }
+
+        const connectWS = () => {
+            if (retryCount > 5) {
+                setIsPollingMode(true);
+                console.warn("WS: Max retries reached. Switching to Polling Mode (4s).");
+                return;
+            }
+
+            const socket = new WebSocket(`${WS_BASE_URL}/ws/chat`);
+
+            socket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "security_alert") {
+                        const audio = new Audio('/assets/sounds/alert.mp3');
+                        audio.play().catch(() => { });
+                    } else if (data.type === "new_message") {
+                        if (data.sender === "user") {
+                            const audio = new Audio('/assets/sounds/notification.mp3');
+                            audio.play().catch(() => { });
+                        }
+                        // Update relevant session state
+                        setSessions(prev => prev.map(s => {
+                            if (s.conversationId === data.conversation_id || s.phone === data.phone) {
+                                return { ...s, messages: [...s.messages, data] };
+                            }
+                            return s;
+                        }));
+                    } else if (data.type === "message_status_update") {
+                        setSessions(prev => prev.map(s => {
+                            if (s.phone === data.phone) {
+                                return {
+                                    ...s,
+                                    messages: s.messages.map(m => m.id === data.id ? { ...m, status: data.status } : m)
+                                };
+                            }
+                            return s;
+                        }));
+                    }
+                } catch (e) { console.error("WS Parse Error", e); }
+            };
+
+            socket.onclose = () => {
+                const timeout = Math.min(1000 * Math.pow(2, retryCount), 10000);
+                setTimeout(() => {
+                    setRetryCount(prev => prev + 1);
+                    connectWS();
+                }, timeout);
+            };
+
+            socket.onopen = () => {
+                setRetryCount(0);
+                setIsPollingMode(false);
+                console.log("WS: Connected");
+            };
+        };
+
+        connectWS();
+    }, [retryCount]);
+
+    // PERSISTENCE: Save Workspace Config to LocalStorage
+    useEffect(() => {
+        const workspaceData = {
+            sessions,
+            layoutMode,
+            activeConversationId
+        };
+        localStorage.setItem("workspace_layout", JSON.stringify(workspaceData));
+    }, [sessions, layoutMode, activeConversationId]);
+
+    // PERSISTENCE: Periodic Server Sync
     useEffect(() => {
         const saveConfig = setTimeout(async () => {
             const workspaceConfig = {
@@ -71,7 +161,10 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
             try {
                 await fetch("http://localhost:8000/admin/workspace", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
                     body: JSON.stringify({ config: JSON.stringify(workspaceConfig) })
                 });
             } catch (e) {
@@ -79,570 +172,429 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
             }
         }, 2000);
         return () => clearTimeout(saveConfig);
-    }, [sessions, layoutMode, activeConversationId]);
+    }, [sessions, layoutMode, activeConversationId, token]);
 
-    // RESTORE: Load Workspace Config
-    useEffect(() => {
-        const checkIntegrity = async () => {
-            try {
-                const res = await fetch("http://localhost:8000/conversations/");
-                if (res.ok) {
-                    const validConvs = await res.json();
-                    const validIds = new Set(validConvs.map((c: any) => c.id));
-                    setSessions(prev => {
-                        // GRACE PERIOD: Don't eject sessions that are less than 15 seconds old
-                        const now = Date.now();
-                        const filtered = prev.filter(s => {
-                            const isOld = (s as any)._createdAt ? (now - (s as any)._createdAt > 15000) : false;
-                            return !isOld || validIds.has(s.conversationId);
-                        });
-                        if (filtered.length !== prev.length) return filtered;
-                        return prev;
-                    });
-                }
-            } catch (e) {
-                console.error("Integrity check failed", e);
-            }
-        };
-
-        fetch("http://localhost:8000/admin/config")
-            .then(res => res.json())
-            .then(data => {
-                if (data.workspace_config) {
-                    try {
-                        const conf = JSON.parse(data.workspace_config);
-                        if (conf.layout_mode) setLayoutMode(conf.layout_mode);
-                        if (conf.active_conversation_id) setActiveConversationId(conf.active_conversation_id);
-                    } catch (e) { }
-                }
-                checkIntegrity();
-            });
-
-        const integrityInterval = setInterval(checkIntegrity, 5000);
-        return () => clearInterval(integrityInterval);
-    }, []);
-
-    useEffect(() => {
-        activePhoneRef.current = activeClientPhone;
-    }, [activeClientPhone]);
-
-    useEffect(() => {
-        if (isDarkMode) {
-            document.documentElement.classList.add("dark");
-            localStorage.setItem("theme", "dark");
-        } else {
-            document.documentElement.classList.remove("dark");
-            localStorage.setItem("theme", "light");
-        }
-    }, [isDarkMode]);
-
-    const tRef = useRef(t);
-    useEffect(() => { tRef.current = t; }, [t]);
-
-    useEffect(() => {
-        let socket: WebSocket | null = new WebSocket("ws://localhost:8000/ws/chat");
-        ws.current = socket;
-
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.event === 'security_alert') {
-                setSecurityAlert({ show: true, message: data.message, reason: data.reason });
-                setTimeout(() => setSecurityAlert(null), 8000);
-                return;
-            }
-
-            setSessions(prev => prev.map(session => {
-                if (session.clientPhone === data.phone) {
-                    const isFromClient = data.sender === "user";
-                    const isAI = data.is_ai_generated;
-
-                    const formatted = {
-                        id: data.id,
-                        role: isFromClient ? "client" : "user",
-                        sender: isFromClient
-                            ? tRef.current('chat.client_label')
-                            : (isAI ? `🤖 ${tRef.current('chat.ai_label')}` : `👤 ${tRef.current('chat.you')}`),
-                        is_ai: isAI,
-                        text: data.content,
-                        phone: data.phone,
-                        timestamp: data.timestamp,
-                        status: data.status || 'sent',
-                        metadata: typeof data.metadata === 'string' ? JSON.parse(data.metadata || '{}') : (data.metadata || {})
-                    };
-
-                    // Optimistic resolution: remove pending/sending if real one arrives
-                    const existsIdx = session.messages.findIndex(m => m.id === data.id || (m.status === 'sending' && m.text === data.content));
-                    let newMessages = [...session.messages];
-
-                    if (existsIdx !== -1) {
-                        newMessages[existsIdx] = formatted;
-                    } else {
-                        newMessages.push(formatted);
-                    }
-
-                    return {
-                        ...session,
-                        messages: newMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()),
-                        isThinking: isFromClient
-                    };
-                }
-                return session;
-            }));
-
-            if (data.sender !== 'agent') {
-                triggerNotification();
-            }
-        };
-
-        socket.onerror = (err) => {
-            console.warn("WebSocket Tool Error:", err);
-        };
-
-        return () => {
-            if (socket) {
-                // Ensure no more callbacks trigger
-                socket.onmessage = null;
-                socket.onopen = null;
-                socket.onerror = null;
-                socket.onclose = null;
-                // Graceful close: if connecting, handle establish then close
-                if (socket.readyState === WebSocket.CONNECTING) {
-                    socket.onopen = () => { socket?.close(); };
-                } else if (socket.readyState === WebSocket.OPEN) {
-                    socket.close();
-                }
-                socket = null;
-            }
-        };
-    }, []);
-
-    const triggerNotification = () => {
-        const originalTitle = document.title;
-        let count = 0;
-        const interval = setInterval(() => {
-            document.title = count % 2 === 0 ? "🔔 (1) New Message!" : originalTitle;
-            count++;
-            if (count > 5) {
-                clearInterval(interval);
-                document.title = originalTitle;
-            }
-        }, 1000);
-
-        // Removed Pixabay audio to fix 403 errors.
-    };
-
-    // LIVE SYNC POLLING: Run every 4s, but don't re-create interval on every session change
-    const sessionsRef = useRef(sessions);
-    useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
-
+    // RESTORE: Load Workspace Config & Sessions
     useEffect(() => {
         const syncList = async () => {
             try {
-                const res = await fetch("http://localhost:8000/conversations/");
+                const res = await fetch("http://localhost:8000/conversations/", {
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
                 if (res.ok) {
                     const list = await res.json();
                     setConversations(list);
-
-                    // Check for updates in active sessions
-                    list.forEach((c: any) => {
-                        const prevTime = lastSyncRef.current[c.id];
-                        if (prevTime && prevTime !== c.last_message_time) {
-                            // Message arrived! Refresh windows if open
-                            const sessionOpen = sessionsRef.current.find(s => Number(s.conversationId) === Number(c.id));
-                            if (sessionOpen) {
-                                console.log("LIVE: Message update detected for", c.id);
-                                fetchMessages(c.id);
-                            }
-                            triggerNotification();
-                        }
-                        lastSyncRef.current[c.id] = c.last_message_time;
-                    });
                 }
-            } catch (e) { }
+            } catch (err) {
+                console.error("Sync failed", err);
+            }
         };
-
-        const interval = setInterval(syncList, 4000);
+        syncList();
+        const interval = setInterval(syncList, 8000);
         return () => clearInterval(interval);
-    }, []);
+    }, [token]);
 
-    async function fetchMessages(convId: number) {
-        const id = Number(convId);
-        // INTERNAL GUARD: Don't fetch if currently fetching or already hydrated recently
-        if (hydrationLock.current.has(id)) return;
-
-        hydrationLock.current.add(id);
-        console.log("FETCH: Hydrating session", id);
+    const fetchMessages = async (convId: number) => {
         try {
-            const res = await fetch(`http://localhost:8000/conversations/${convId}/messages?v=${Date.now()}`, {
-                headers: { 'Cache-Control': 'no-cache' }
+            const res = await fetch(`http://localhost:8000/conversations/${convId}/messages`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const msgs = await res.json();
+                setSessions(prev => {
+                    const idx = prev.findIndex(s => s.conversationId === convId);
+                    if (idx !== -1) {
+                        const copy = [...prev];
+                        copy[idx] = { ...copy[idx], messages: msgs, isLoading: false };
+                        return copy;
+                    }
+                    return prev;
+                });
+            }
+        } catch (e) { console.error(e); }
+    };
+
+    const bringToFront = (id: number) => {
+        setSessions(prev => prev.map(s => s.conversationId === id ? {
+            ...s,
+            layout: {
+                ...(s.layout || { x: 50, y: 50, width: 450, height: 650 }),
+                zIndex: ++maxZIndex.current
+            }
+        } : s));
+    };
+
+    const handleToggleAI = async (convId: number) => {
+        if (convId < 0) {
+            setSessions(prev => prev.map(s => s.conversationId === convId ? { ...s, autoAIEnabled: !s.autoAIEnabled } : s));
+            return;
+        }
+        try {
+            const res = await fetch(`http://localhost:8000/conversations/${convId}/toggle-auto-ai`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}` }
             });
             if (res.ok) {
                 const data = await res.json();
-                const formatted = data.map((d: any) => {
-                    const isClient = d.sender === 'user'; // Viene de WhatsApp (Externo)
-                    return {
-                        id: d.id,
-                        role: isClient ? 'client' : 'user', // user = operador/IA en la derecha
-                        sender: isClient ? t('chat.client_label') : (d.is_ai_generated ? `🤖 ${t('chat.ai_label')}` : `👤 ${t('chat.you')}`),
-                        is_ai: d.is_ai_generated,
-                        text: d.content,
-                        phone: d.phone || "",
-                        timestamp: d.timestamp,
-                        status: d.status || 'sent',
-                        confidence: d.confidence,
-                        metadata: typeof d.metadata_json === 'string'
-                            ? JSON.parse(d.metadata_json || '{}')
-                            : (d.metadata_json || {})
-                    };
-                });
-
-                console.log(`FETCH: Found ${formatted.length} messages for session ${convId}`);
-                setSessions(prev => {
-                    const exists = prev.find(s => Number(s.conversationId) === Number(id));
-                    if (!exists) {
-                        hydrationLock.current.delete(id); // Release lock so it can try again later if it disappeared
-                        return prev;
-                    }
-                    return prev.map(s =>
-                        Number(s.conversationId) === Number(id)
-                            ? { ...s, messages: formatted, isLoading: false }
-                            : s
-                    );
-                });
-            } else {
-                setSessions(prev => prev.map(s => Number(s.conversationId) === Number(id) ? { ...s, isLoading: false } : s));
-                hydrationLock.current.delete(id); // Release on failure
+                setSessions(prev => prev.map(s => s.conversationId === convId ? { ...s, autoAIEnabled: data.auto_ai_enabled } : s));
             }
         } catch (e) {
-            console.error("FETCH: Failed for", id, e);
-            setSessions(prev => prev.map(s => Number(s.conversationId) === Number(id) ? { ...s, isLoading: false } : s));
-            hydrationLock.current.delete(id);
-        } finally {
-            // Lock release is handled inside setSessions/catch to ensure we don't block forever on transient errors
+            console.error("Failed to toggle AI", e);
         }
-    }
+    };
 
-    useEffect(() => {
-        sessions.forEach(session => {
-            const id = Number(session.conversationId);
-            // ONLY trigger hydration if not already locked AND missing messages AND marked for load
-            if (!hydrationLock.current.has(id) && session.messages.length === 0 && session.isLoading === true) {
-                console.log(`FETCH: Lock & Trigger hydration for session ${id}`);
-                fetchMessages(id);
-            }
-        });
-    }, [sessions]);
-
-    function handleSelectConversation(id: number, name: string, phone: string) {
-        const convId = Number(id);
-        const existingIdx = sessions.findIndex(s => Number(s.conversationId) === convId);
-
-        if (existingIdx !== -1) {
-            setActiveConversationId(convId);
-            // Bring to front
-            maxZIndex.current += 1;
-            setSessions(prev => prev.map(s => s.conversationId === convId ? { ...s, layout: { ...s.layout!, zIndex: maxZIndex.current } } : s));
-        } else {
-            console.log("SESSION: Creating new canvas window for", convId);
-            maxZIndex.current += 1;
+    const handleSelectConversation = (id: number, name: string, phone: string) => {
+        const exists = sessions.find(s => s.conversationId === id);
+        if (!exists) {
             const newSession: ChatSession = {
-                conversationId: convId,
+                conversationId: id,
                 clientName: name,
                 clientPhone: phone,
                 messages: [],
                 isThinking: false,
                 isLoading: true,
-                _createdAt: Date.now(),
+                autoAIEnabled: conversations.find(c => c.id === id)?.auto_ai_enabled ?? true,
+                phone: phone,
                 layout: {
-                    x: 50 + (sessions.length * 30),
-                    y: 50 + (sessions.length * 30),
+                    x: 50 + (sessions.length * 40),
+                    y: 50 + (sessions.length * 40),
                     width: 450,
                     height: 650,
-                    zIndex: maxZIndex.current
+                    zIndex: ++maxZIndex.current
                 }
-            } as any;
-
+            };
             setSessions(prev => [...prev, newSession]);
-            setActiveConversationId(convId);
+            fetchMessages(id);
+        } else {
+            bringToFront(id);
         }
-    }
+        setActiveConversationId(id);
+    };
 
     const startDrag = (e: React.MouseEvent, id: number) => {
-        if (layoutMode !== "canvas") return;
+        bringToFront(id);
         setDraggingId(id);
+        setIsDragging(true);
         const session = sessions.find(s => s.conversationId === id);
-        if (session?.layout) {
+        if (session && session.layout && canvasRef.current) {
+            const rect = canvasRef.current.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left + canvasRef.current.scrollLeft;
+            const mouseY = e.clientY - rect.top + canvasRef.current.scrollTop;
+
             dragOffset.current = {
-                x: e.clientX - session.layout.x,
-                y: e.clientY - session.layout.y
+                x: mouseX - session.layout.x,
+                y: mouseY - session.layout.y
             };
-            maxZIndex.current += 1;
-            setSessions(prev => prev.map(s => s.conversationId === id ? { ...s, layout: { ...s.layout!, zIndex: maxZIndex.current } } : s));
         }
     };
 
     const startResize = (e: React.MouseEvent, id: number) => {
         e.stopPropagation();
         setResizingId(id);
-        maxZIndex.current += 1;
-        setSessions(prev => prev.map(s => s.conversationId === id ? { ...s, layout: { ...s.layout!, zIndex: maxZIndex.current } } : s));
     };
 
     useEffect(() => {
-        const handleGlobalMove = (e: MouseEvent) => {
+        const handleMouseMoveGlobal = (e: MouseEvent) => {
+            if (!canvasRef.current) return;
+            const rect = canvasRef.current.getBoundingClientRect();
+
+            // Mouse position relative to the SCROLLABLE canvas content
+            const mouseX = e.clientX - rect.left + canvasRef.current.scrollLeft;
+            const mouseY = e.clientY - rect.top + canvasRef.current.scrollTop;
+
             if (draggingId !== null) {
                 setSessions(prev => prev.map(s => s.conversationId === draggingId ? {
                     ...s,
-                    layout: { ...s.layout!, x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y }
+                    layout: {
+                        ...(s.layout || { width: 450, height: 650, zIndex: 10 }),
+                        x: mouseX - dragOffset.current.x,
+                        y: mouseY - dragOffset.current.y,
+                        zIndex: maxZIndex.current
+                    }
                 } : s));
             } else if (resizingId !== null) {
                 setSessions(prev => prev.map(s => s.conversationId === resizingId ? {
                     ...s,
                     layout: {
-                        ...s.layout!,
-                        width: Math.max(300, e.clientX - s.layout!.x),
-                        height: Math.max(400, e.clientY - s.layout!.y)
+                        ...(s.layout || { width: 450, height: 650, x: 0, y: 0, zIndex: 10 }),
+                        width: Math.max(300, mouseX - (s.layout?.x || 0)),
+                        height: Math.max(400, mouseY - (s.layout?.y || 0))
                     }
                 } : s));
+            } else if (isPanning) {
+                const dx = e.clientX - panStart.current.x;
+                const dy = e.clientY - panStart.current.y;
+                canvasRef.current.scrollLeft -= dx;
+                canvasRef.current.scrollTop -= dy;
+                panStart.current = { x: e.clientX, y: e.clientY };
             }
         };
 
-        const handleGlobalUp = () => {
+        const handleMouseUpGlobal = () => {
             setDraggingId(null);
             setResizingId(null);
+            setIsDragging(false);
+            setIsPanning(false);
         };
 
-        if (draggingId !== null || resizingId !== null) {
-            window.addEventListener("mousemove", handleGlobalMove);
-            window.addEventListener("mouseup", handleGlobalUp);
+        if (draggingId !== null || resizingId !== null || isPanning) {
+            window.addEventListener("mousemove", handleMouseMoveGlobal);
+            window.addEventListener("mouseup", handleMouseUpGlobal);
         }
         return () => {
-            window.removeEventListener("mousemove", handleGlobalMove);
-            window.removeEventListener("mouseup", handleGlobalUp);
+            window.removeEventListener("mousemove", handleMouseMoveGlobal);
+            window.removeEventListener("mouseup", handleMouseUpGlobal);
         };
-    }, [draggingId, resizingId]);
+    }, [draggingId, resizingId, isPanning]);
 
-    async function handleSimulateIncoming(phone: string, message: string) {
-        if (phone === activeClientPhone) {
-            setSessions(prev => prev.map(s => s.conversationId === activeConversationId ? { ...s, isThinking: true } : s));
+
+
+
+    const handleCanvasMouseDown = (e: React.MouseEvent) => {
+        // Only pan if clicking direct background or the grid, not a window
+        if (layoutMode === 'canvas' && (e.target === canvasRef.current || (e.target as HTMLElement).classList.contains('infinite-canvas-bg'))) {
+            setIsPanning(true);
+            panStart.current = { x: e.clientX, y: e.clientY };
         }
-        await fetch("http://localhost:8000/whatsapp/webhook", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sender: phone, message: message }),
-        });
-    }
+    };
 
-    const updateSessionMessages = useCallback((convId: number, updateFn: (msgs: any[]) => any[]) => {
-        setSessions(prev => prev.map(s => Number(s.conversationId) === Number(convId) ? { ...s, messages: updateFn(s.messages) } : s));
-    }, []);
+    const handleCreateNewChat = () => {
+        setNewChatPhone("");
+        setNewChatName("");
+        setIsNewChatOpen(true);
+    };
 
-    const sendMessage = useCallback(async (text: string, session: ChatSession) => {
-        if (!text.trim() || !session.conversationId) return;
-
-        const tempId = Date.now();
-        const optimisticMsg = {
-            id: tempId,
-            role: "user",
-            sender: t('chat.you'),
-            text: text,
-            phone: session.clientPhone,
-            timestamp: new Date().toISOString(),
-            status: "sending",
-            is_ai: false
-        };
-
-        updateSessionMessages(session.conversationId, msgs => [...msgs, optimisticMsg]);
-
+    const submitNewChat = async () => {
+        if (!newChatPhone.trim()) return;
         try {
-            const res = await fetch(`http://localhost:8000/conversations/${session.conversationId}/messages`, {
+            const res = await fetch(`${API_ENDPOINTS.conversations.base}initiate`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ content: text }),
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ phone_number: newChatPhone, name: newChatName || undefined })
             });
-
             if (res.ok) {
                 const data = await res.json();
-                updateSessionMessages(session.conversationId, msgs => msgs.map(m => m.id === tempId ? { ...m, id: data.id, status: 'sent' } : m));
-            } else {
-                throw new Error("Failed to send");
+                handleSelectConversation(data.id, data.client_name, data.client_phone);
+                setIsNewChatOpen(false);
             }
-        } catch (e) {
-            console.error("Send failed", e);
-            updateSessionMessages(session.conversationId, msgs => msgs.map(m => m.id === tempId ? { ...m, status: 'error' } : m));
-            alert("Failed to send message");
-        }
-    }, [t, updateSessionMessages]);
+        } catch (e) { console.error(e); }
+    };
 
-    const approveMessage = useCallback(async (id: number, session: ChatSession) => {
-        updateSessionMessages(session.conversationId, msgs => msgs.map(m => m.id === id ? { ...m, status: 'sent' } : m));
-        await fetch(`http://localhost:8000/conversations/messages/${id}/approve`, { method: "POST" });
-    }, [updateSessionMessages]);
 
-    const rejectMessage = useCallback(async (id: number, session: ChatSession) => {
-        if (!confirm(t('chat.alerts.confirm_reject'))) return;
-        updateSessionMessages(session.conversationId, msgs => msgs.filter(m => m.id !== id));
-        fetch(`http://localhost:8000/conversations/messages/${id}/reject`, { method: "POST" });
-    }, [t, updateSessionMessages]);
 
-    const deleteMessage = useCallback(async (id: number, session: ChatSession) => {
-        if (!confirm(t('chat.alerts.confirm_delete'))) return;
-        updateSessionMessages(session.conversationId, msgs => msgs.filter(m => m.id !== id));
-        fetch(`http://localhost:8000/conversations/messages/${id}/reject`, { method: "POST" });
-    }, [t, updateSessionMessages]);
-
-    const editMessage = useCallback(async (id: number, currentText: string, session: ChatSession) => {
-        const newText = prompt(t('chat.alerts.edit_prompt'), currentText);
-        if (newText !== null && newText !== currentText) {
-            await fetch(`http://localhost:8000/conversations/messages/${id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ content: newText })
+    const sendMessage = async (text: string, session: ChatSession) => {
+        try {
+            const res = await fetch(API_ENDPOINTS.conversations.messages(session.conversationId), {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ content: text }),
             });
-            updateSessionMessages(session.conversationId, msgs => msgs.map(m => m.id === id ? { ...m, text: newText } : m));
-        }
-    }, [t, updateSessionMessages]);
+            if (res.ok) fetchMessages(session.conversationId);
+        } catch (e) { console.error(e); }
+    };
 
-    useEffect(() => {
-        const handleGlobalUp = () => {
-            setDraggingId(null);
-            setResizingId(null);
-        };
+    const approveMessage = async (messageId: number, session: ChatSession) => {
+        try {
+            const res = await fetch(API_ENDPOINTS.conversations.messageAction(messageId, "approve"), {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (res.ok) fetchMessages(session.conversationId);
+        } catch (e) { console.error(e); }
+    };
 
-        if (draggingId !== null || resizingId !== null) {
-            window.addEventListener("mouseup", handleGlobalUp);
-        }
-        return () => {
-            window.removeEventListener("mouseup", handleGlobalUp);
-        };
-    }, [draggingId, resizingId]);
+    const editMessage = async (messageId: number, content: string, session: ChatSession) => {
+        try {
+            const res = await fetch(API_ENDPOINTS.conversations.messageUpdate(messageId), {
+                method: "PUT",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ content })
+            });
+            if (res.ok) fetchMessages(session.conversationId);
+        } catch (e) { console.error(e); }
+    };
+
+    const deleteMessage = async (messageId: number, session: ChatSession) => {
+        try {
+            const res = await fetch(API_ENDPOINTS.conversations.messageAction(messageId, "reject"), {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (res.ok) fetchMessages(session.conversationId);
+        } catch (e) { console.error(e); }
+    };
+
+    const deleteBulkMessages = async (messageIds: number[], session: ChatSession) => {
+        try {
+            const res = await fetch(API_ENDPOINTS.conversations.bulk, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ message_ids: messageIds, action: "delete" })
+            });
+            if (res.ok) fetchMessages(session.conversationId);
+        } catch (e) { console.error(e); }
+    };
 
     return (
-        <div className="flex h-full w-full bg-white dark:bg-gray-900 transition-colors duration-200 overflow-hidden">
-            {securityAlert?.show && (
-                <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] w-full max-w-lg px-4 animate-in fade-in slide-in-from-top-4">
-                    <div className="bg-red-600 text-white p-4 rounded-3xl shadow-2xl flex items-center gap-4 border-2 border-red-400">
-                        <div className="p-3 bg-red-700/50 rounded-2xl animate-pulse">
-                            <ShieldAlert className="w-8 h-8" />
-                        </div>
-                        <div className="flex-1">
-                            <h3 className="font-black text-xs uppercase tracking-widest bg-red-800/50 w-fit px-2 py-0.5 rounded mb-1">Sentinel Violation</h3>
-                            <p className="text-sm font-bold leading-tight">{securityAlert.message}</p>
-                            <p className="text-[10px] opacity-70 mt-1 italic">{securityAlert.reason}</p>
-                        </div>
-                        <button onClick={() => setSecurityAlert(null)} className="p-2 hover:bg-red-700 rounded-full transition-colors font-black">✕</button>
-                    </div>
-                </div>
-            )}
-
+        <div className="flex h-screen w-full bg-slate-50 dark:bg-[var(--brand-bg)] transition-colors duration-300 overflow-hidden font-sans">
             <Sidebar
                 onSelect={handleSelectConversation}
-                onPrefetch={(id) => {
-                    const exists = sessions.find(s => s.conversationId === id);
-                    if (!exists) fetchMessages(id);
-                }}
                 activeConversationId={activeConversationId}
-                onNewMessage={() => setIsSimulateModalOpen(true)}
+                onNewMessage={handleCreateNewChat}
                 onNavigate={onNavigate}
                 conversations={conversations}
             />
 
-            <SimulateWebhookModal
-                isOpen={isSimulateModalOpen}
-                onClose={() => setIsSimulateModalOpen(false)}
-                onSimulate={handleSimulateIncoming}
-            />
-
             <div className="flex-1 flex flex-col relative w-full h-full overflow-hidden">
-                <div className="h-14 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex items-center justify-end px-6 gap-4 sticky top-0 z-[60] shadow-sm transition-colors">
-                    <div className="flex gap-2 p-1 bg-gray-100 dark:bg-gray-900 rounded-2xl border dark:border-gray-700">
+                {/* MODERN HEADER SECTION */}
+                <div className="flex items-center justify-between p-4 border-b dark:border-[var(--brand-border)] bg-white/50 dark:bg-[var(--brand-surface)]/50 backdrop-blur-md z-[70]">
+                    <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-3">
+                            {config.logo_url && <img src={config.logo_url} alt="Logo" className="w-6 h-6 object-contain" />}
+                            <span className="text-sm font-black dark:text-white uppercase tracking-tighter" style={{ color: 'var(--brand-primary)' }}>{config.business_name || "Console"}</span>
+                        </div>
+
+                        <div className="h-4 w-px bg-[var(--brand-border)]"></div>
+                        <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full animate-pulse ${isPollingMode ? 'bg-amber-500' : token ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-red-500'}`}></div>
+                            <span className="text-[10px] font-black uppercase text-slate-400 dark:text-gray-500 tracking-widest leading-none">
+                                {isPollingMode ? t('chat.status.polling') : token ? t('chat.status.online') : t('chat.status.offline')}
+                            </span>
+                        </div>
+
+                        <div className="h-4 w-px bg-[var(--brand-border)]"></div>
+                        <div className="flex items-center gap-3">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase">{t('chat.node_registry')}</span>
+                            <div className="px-2 py-0.5 bg-[var(--brand-surface)] rounded border dark:border-[var(--brand-border)] flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full ${isAdmin ? 'bg-indigo-500' : 'bg-amber-500'}`}></span>
+                                <span className="text-[9px] font-black dark:text-slate-300 uppercase tracking-tighter">
+                                    {isAdmin ? t('chat.privileged_node') : t('chat.operational_access')}
+                                </span>
+                            </div>
+                        </div>
+                        <div className="flex gap-2 p-1 bg-[var(--brand-bg)] rounded-2xl border dark:border-[var(--brand-border)] ml-4">
+                            <button
+                                onClick={() => setLayoutMode("focus")}
+                                className={`p-2 rounded-xl transition-all ${layoutMode === "focus" ? "bg-white dark:bg-[var(--brand-surface)] shadow-md text-[var(--brand-primary)] scale-105" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"}`}
+                                title="Focus Mode"
+                            >
+                                <Monitor className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => setLayoutMode("canvas")}
+                                className={`p-2 rounded-xl transition-all ${layoutMode === "canvas" ? "bg-white dark:bg-[var(--brand-surface)] shadow-md text-[var(--brand-primary)] scale-105" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"}`}
+                                title="Whiteboard Canvas"
+                            >
+                                <LayoutGrid className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3 px-3 py-1.5 bg-[var(--brand-surface)] rounded-2xl border dark:border-[var(--brand-border)] shadow-sm">
+                            <div
+                                className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black text-white uppercase ring-2 ring-[var(--brand-primary)]/20"
+                                style={{ backgroundColor: "var(--brand-primary)" }}
+                            >
+                                {user?.username.substring(0, 2)}
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[11px] font-black dark:text-white leading-none uppercase">{user?.username}</span>
+                                <span className="text-[8px] font-bold text-slate-500 uppercase tracking-[0.2em] mt-1">{t('auth.role_access', { role: user?.role })}</span>
+                            </div>
+                            <button
+                                onClick={logout}
+                                className="ml-2 p-2 hover:bg-red-500/10 rounded-xl text-slate-400 hover:text-red-500 transition-all active:scale-90"
+                                title={t('chat.terminate_session')}
+                            >
+                                <LayoutIcon className="w-4 h-4 rotate-90" />
+                            </button>
+                        </div>
+
                         <button
-                            onClick={() => setLayoutMode("focus")}
-                            className={`p-2 rounded-xl transition-all ${layoutMode === "focus" ? "bg-white dark:bg-gray-800 shadow-md text-blue-500 scale-105" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"}`}
-                            title="Focus Mode"
+                            onClick={toggleDarkMode}
+                            className="p-2.5 bg-[var(--brand-surface)] rounded-2xl border dark:border-[var(--brand-border)] text-slate-500 dark:text-slate-400 hover:scale-105 transition-transform"
                         >
-                            <Monitor className="w-5 h-5" />
-                        </button>
-                        <button
-                            onClick={() => setLayoutMode("canvas")}
-                            className={`p-2 rounded-xl transition-all ${layoutMode === "canvas" ? "bg-white dark:bg-gray-800 shadow-md text-blue-500 scale-105" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"}`}
-                            title="Whiteboard Canvas"
-                        >
-                            <LayoutGrid className="w-5 h-5" />
-                        </button>
-                        <div className="w-[1px] bg-gray-300 dark:bg-gray-700 mx-1"></div>
-                        <button
-                            onClick={() => setIsDarkMode(!isDarkMode)}
-                            className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-xl transition-all text-gray-500 hover:text-amber-500 dark:hover:text-blue-400"
-                        >
-                            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                            {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-[var(--brand-secondary)]" />}
                         </button>
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-auto relative bg-gray-50 dark:bg-gray-950 p-6 custom-scrollbar" ref={canvasRef}>
-                    {/* Whiteboard Grid Background */}
-                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none dark:opacity-[0.05]"
-                        style={{ backgroundImage: `radial-gradient(circle, currentColor 1px, transparent 1px)`, backgroundSize: '40px 40px' }}></div>
-
+                <div
+                    className={`flex-1 overflow-auto relative bg-slate-50 dark:bg-[var(--brand-surface)]/40 infinite-canvas ${isDragging || (isPanning && layoutMode === 'canvas') ? 'cursor-grabbing' : (layoutMode === 'canvas' ? 'cursor-grab' : '')}`}
+                    ref={canvasRef}
+                    onMouseDown={handleCanvasMouseDown}
+                >
                     {layoutMode === "focus" ? (
-                        <div className="h-full w-full animate-in fade-in duration-500">
+                        <div className="h-full w-full p-0 flex items-center justify-center overflow-hidden">
                             {activeSession ? (
-                                <div className="w-full h-full p-0">
+                                <div className="w-full h-full animate-in fade-in duration-500 shadow-none rounded-none overflow-hidden border-x dark:border-slate-800">
                                     <ChatWindow
                                         {...activeSession}
-                                        onSendMessage={(txt) => sendMessage(txt, activeSession)}
-                                        onApprove={(id) => approveMessage(id, activeSession)}
-                                        onReject={(id) => rejectMessage(id, activeSession)}
-                                        onEdit={(id, txt) => editMessage(id, txt, activeSession)}
-                                        onDelete={(id) => deleteMessage(id, activeSession)}
+                                        onSendMessage={(txt: string) => sendMessage(txt, activeSession)}
+                                        onApprove={(id: number) => approveMessage(id, activeSession)}
+                                        onEdit={(id: number, txt: string) => editMessage(id, txt, activeSession)}
+                                        onDelete={(id: number) => deleteMessage(id, activeSession)}
+                                        onBulkDelete={(ids: number[]) => deleteBulkMessages(ids, activeSession)}
                                         onMaximize={() => setLayoutMode("canvas")}
+                                        autoAIEnabled={activeSession.autoAIEnabled}
+                                        onToggleAI={() => handleToggleAI(activeSession.conversationId)}
                                         onClose={() => {
                                             setSessions(prev => prev.filter(s => s.conversationId !== activeSession.conversationId));
                                             setActiveConversationId(null);
                                         }}
                                         isMaximized={true}
+                                        isLoading={activeSession.isLoading}
+                                        timezone={config.timezone}
                                     />
                                 </div>
                             ) : (
-                                <div className="flex flex-col items-center justify-center h-full opacity-30 select-none">
-                                    <Layout className="w-20 h-20 mb-6" />
-                                    <h2 className="text-2xl font-black uppercase tracking-[0.5em]">{t('chat.select_client')}</h2>
+                                <div className="flex flex-col items-center justify-center h-full opacity-20 grayscale">
+                                    <LayoutIcon className="w-32 h-32 mb-10 text-slate-400" />
+                                    <h2 className="text-3xl font-black uppercase tracking-[0.6em] text-slate-400">{t('chat.select_node')}</h2>
                                 </div>
                             )}
                         </div>
                     ) : (
-                        <div className="min-w-[3000px] min-h-[3000px] relative">
+                        <div className="min-w-[6000px] min-h-[6000px] relative p-40 infinite-canvas-bg">
+                            {/* Whiteboard Grid Background */}
+                            <div className="absolute inset-0 opacity-[0.05] pointer-events-none dark:opacity-[0.1]"
+                                style={{ backgroundImage: `radial-gradient(circle, currentColor 1px, transparent 1px)`, backgroundSize: '60px 60px' }}></div>
+
                             {sessions.length === 0 && (
-                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center opacity-20 select-none">
-                                    <Grid2X2 className="w-32 h-32 mb-8" />
-                                    <h2 className="text-4xl font-black uppercase tracking-[1em]">{t('chat.select_client')}</h2>
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center opacity-10 pointer-events-none">
+                                    <Grid2X2 className="w-48 h-48 mb-12 text-slate-400" />
+                                    <h2 className="text-5xl font-black uppercase tracking-[1em] text-slate-400">{t('chat.workspace_empty')}</h2>
                                 </div>
                             )}
 
                             {sessions.map((session) => (
                                 <div
                                     key={session.conversationId}
-                                    className={`absolute transition-shadow duration-200 ${draggingId === session.conversationId ? "shadow-2xl ring-2 ring-indigo-500/50" : "shadow-xl"}`}
+                                    className={`absolute transition-shadow duration-200 rounded-[32px] overflow-hidden border dark:border-[var(--brand-border)] ${draggingId === session.conversationId ? "shadow-2xl ring-4 ring-[var(--brand-primary)]/30 scale-[1.02]" : "shadow-xl"}`}
                                     style={{
                                         left: session.layout?.x || 0,
                                         top: session.layout?.y || 0,
                                         width: session.layout?.width || 450,
                                         height: session.layout?.height || 650,
                                         zIndex: session.layout?.zIndex || 10,
-                                        cursor: draggingId === session.conversationId ? 'grabbing' : 'default'
+                                        cursor: draggingId === session.conversationId ? 'grabbing' : 'default',
+                                        backgroundColor: 'var(--brand-surface)'
                                     }}
                                     onMouseDown={() => {
-                                        if (activeConversationId !== session.conversationId) setActiveConversationId(session.conversationId);
+                                        if (activeConversationId !== session.conversationId) {
+                                            setActiveConversationId(session.conversationId);
+                                            bringToFront(session.conversationId);
+                                        }
                                     }}
                                 >
                                     <ChatWindow
                                         {...session}
-                                        onSendMessage={(txt) => sendMessage(txt, session)}
-                                        onApprove={(id) => approveMessage(id, session)}
-                                        onReject={(id) => rejectMessage(id, session)}
-                                        onEdit={(id, txt) => editMessage(id, txt, session)}
-                                        onDelete={(id) => deleteMessage(id, session)}
+                                        onSendMessage={(txt: string) => sendMessage(txt, session)}
+                                        onApprove={(id: number) => approveMessage(id, session)}
+                                        onEdit={(id: number, txt: string) => editMessage(id, txt, session)}
+                                        onDelete={(id: number) => deleteMessage(id, session)}
+                                        onBulkDelete={(ids: number[]) => deleteBulkMessages(ids, session)}
                                         onMaximize={() => {
                                             setActiveConversationId(session.conversationId);
                                             setLayoutMode("focus");
@@ -651,12 +603,15 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
                                             setSessions(prev => prev.filter(s => s.conversationId !== session.conversationId));
                                             if (activeConversationId === session.conversationId) setActiveConversationId(null);
                                         }}
+                                        autoAIEnabled={session.autoAIEnabled}
+                                        onToggleAI={() => handleToggleAI(session.conversationId)}
                                         isMaximized={false}
                                         isLoading={session.isLoading}
                                         // Custom Props for Canvas
                                         canDrag={true}
-                                        onDragStart={(e: any) => startDrag(e, session.conversationId)}
-                                        onResizeStart={(e: any) => startResize(e, session.conversationId)}
+                                        onDragStart={(e: React.MouseEvent) => startDrag(e, session.conversationId)}
+                                        onResizeStart={(e: React.MouseEvent) => startResize(e, session.conversationId)}
+                                        timezone={config.timezone}
                                     />
                                 </div>
                             ))}
@@ -664,6 +619,58 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
                     )}
                 </div>
             </div>
+
+            {isNewChatOpen && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.target === e.currentTarget && setIsNewChatOpen(false)}>
+                    <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border dark:border-gray-800 ring-1 ring-white/10">
+                        <div className="p-8">
+                            <h2 className="text-2xl font-black dark:text-white mb-2 tracking-tight">{t('new_chat_modal.title')}</h2>
+                            <p className="text-sm text-gray-500 mb-8 font-medium">{t('new_chat_modal.description')}</p>
+
+                            <div className="space-y-6">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{t('new_chat_modal.phone_label')}</label>
+                                    <input
+                                        type="text"
+                                        value={newChatPhone}
+                                        onChange={(e) => setNewChatPhone(e.target.value)}
+                                        className="w-full p-4 bg-gray-50 dark:bg-gray-950 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:outline-none font-mono text-lg dark:text-white transition-all shadow-inner"
+                                        placeholder="+1234567890"
+                                        autoFocus
+                                        onKeyDown={(e) => e.key === 'Enter' && submitNewChat()}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{t('new_chat_modal.name_label')}</label>
+                                    <input
+                                        type="text"
+                                        value={newChatName}
+                                        onChange={(e) => setNewChatName(e.target.value)}
+                                        className="w-full p-4 bg-gray-50 dark:bg-gray-950 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:outline-none dark:text-white transition-all shadow-inner"
+                                        placeholder="John Doe"
+                                        onKeyDown={(e) => e.key === 'Enter' && submitNewChat()}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-6 bg-gray-50 dark:bg-gray-950/50 flex justify-end gap-4 border-t dark:border-gray-800/50">
+                            <button
+                                onClick={() => setIsNewChatOpen(false)}
+                                className="px-6 py-3 text-sm font-bold text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-2xl transition-colors"
+                            >
+                                {t('new_chat_modal.cancel')}
+                            </button>
+                            <button
+                                onClick={submitNewChat}
+                                disabled={!newChatPhone.trim()}
+                                className="px-8 py-3 text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 active:scale-95 transform"
+                            >
+                                {t('new_chat_modal.start')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <InfoPanel
                 clientName={activeClientName}
@@ -677,6 +684,6 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
                     } : null;
                 })() : null}
             />
-        </div>
+        </div >
     );
 }

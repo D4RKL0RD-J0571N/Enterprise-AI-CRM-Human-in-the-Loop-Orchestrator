@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Database, Plus, Edit2, Trash2 } from "lucide-react";
+import { Database, Plus, Edit2, Trash2, Upload } from "lucide-react";
 import type { AIDataset } from "../../../types/admin";
 
 interface Props {
@@ -12,6 +12,7 @@ interface Props {
     handleUpdateDataset: () => void;
     handleDeleteDataset: (id: number) => void;
     toggleDatasetActive: (id: number) => void;
+    handleFileUpload: (file: File, name: string, type: string) => Promise<void>;
 }
 
 export const DatasetsTab = ({
@@ -23,7 +24,8 @@ export const DatasetsTab = ({
     handleCreateDataset,
     handleUpdateDataset,
     handleDeleteDataset,
-    toggleDatasetActive
+    toggleDatasetActive,
+    handleFileUpload
 }: Props) => {
     const { t } = useTranslation();
 
@@ -74,14 +76,34 @@ export const DatasetsTab = ({
                     <h2 className="text-xl font-bold dark:text-white flex items-center gap-3">
                         <Edit2 className="w-6 h-6 text-blue-500" /> {selectedDataset ? t('admin.sections.edit_dataset') : t('admin.sections.new_dataset')}
                     </h2>
-                    {selectedDataset && (
-                        <button
-                            onClick={() => handleDeleteDataset(selectedDataset.id)}
-                            className="p-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-2xl transition-all"
-                        >
-                            <Trash2 className="w-5 h-5" />
-                        </button>
-                    )}
+                    <div className="flex gap-2">
+                        {!selectedDataset && (
+                            <label className="flex items-center gap-2 p-3 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-2xl transition-all cursor-pointer font-bold text-xs">
+                                <Upload className="w-5 h-5" />
+                                {t('admin.actions.upload_file')}
+                                <input
+                                    type="file"
+                                    className="hidden"
+                                    accept=".csv,.json"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                            const type = file.name.endsWith('.csv') ? 'csv' : 'json';
+                                            handleFileUpload(file, file.name.split('.')[0], type);
+                                        }
+                                    }}
+                                />
+                            </label>
+                        )}
+                        {selectedDataset && (
+                            <button
+                                onClick={() => handleDeleteDataset(selectedDataset.id)}
+                                className="p-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-2xl transition-all"
+                            >
+                                <Trash2 className="w-5 h-5" />
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 <div className="space-y-6 flex-1 flex flex-col">
