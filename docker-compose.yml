@@ -9,6 +9,7 @@ services:
       - db-data:/app/database
     environment:
       - DATABASE_URL=sqlite:///database/app.db
+      - ASYNC_DATABASE_URL=sqlite+aiosqlite:///database/app.db
       - REDIS_URL=redis://redis:6379/0
       - RUNNING_IN_DOCKER=true
     extra_hosts:

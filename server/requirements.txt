@@ -16,3 +16,4 @@ celery
 redis
 prometheus_client
 websockets
+pyjwt==2.8.0

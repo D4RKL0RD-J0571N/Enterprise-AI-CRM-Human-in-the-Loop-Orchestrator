@@ -33,6 +33,7 @@ export const API_ENDPOINTS = {
         auditsOperational: `${API_BASE_URL}/admin/audits/operational`,
         test: `${API_BASE_URL}/admin/test`,
         models: `${API_BASE_URL}/admin/models`,
+        license: `${API_BASE_URL}/admin/license`,
     },
     ws: {
         chat: `${WS_BASE_URL}/ws/chat`,

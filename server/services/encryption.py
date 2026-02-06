@@ -12,7 +12,7 @@ MASTER_KEY = os.getenv("MASTER_ENCRYPTION_KEY")
 if not MASTER_KEY:
     # Development fallback - NOT FOR PRODUCTION
     # This is a fixed key for dev consistency, but in prod it should fail if missing.
-    MASTER_KEY = "g6900R-8-M_1_s_V_P_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S_S=" 
+    MASTER_KEY = "7K_AvYE7oOoeKVawub33koSNoLRQK9VQfYbT58kDx5w=" 
 
 try:
     cipher_suite = Fernet(MASTER_KEY.encode())

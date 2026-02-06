@@ -493,12 +493,29 @@ async def upload_license(req: LicenseUploadRequest, db: AsyncSession = Depends(g
         raise HTTPException(status_code=400, detail=str(e))
         
     # 2. Save to Config
+    # Safety Check: Does the column even exist?
+    from sqlalchemy import inspect
+    def sync_check():
+        from database import engine
+        inspector = inspect(engine)
+        return 'license_key' in [c['name'] for c in inspector.get_columns('ai_configs')]
+    
+    import asyncio
+    column_exists = await asyncio.to_thread(sync_check)
+    if not column_exists:
+        raise HTTPException(status_code=503, detail="System is still migrating the database. Please wait a few seconds and try again.")
+        
     result = await db.execute(select(AIConfig).filter(AIConfig.is_active == True))
     config = result.scalars().first()
     
     if not config:
-        # Should not happen in normally bootstrapped system
-        raise HTTPException(status_code=404, detail="System configuration not found.")
+        # Bootstrap: Create default config if none exists for fresh installations
+        config = AIConfig(
+            business_name=payload.get("business_name", "My AI Assistant"),
+            is_active=True
+        )
+        db.add(config)
+        await db.flush() # Ensure it gets an ID
         
     config.license_key = req.license_key
     
@@ -518,6 +535,18 @@ async def upload_license(req: LicenseUploadRequest, db: AsyncSession = Depends(g
 async def get_license_status(db: AsyncSession = Depends(get_async_db), admin: User = Depends(get_admin_user)):
     """Check current license status."""
     from services.licensing import LicensingService
+    from sqlalchemy import inspect
+    
+    # Safety Check: Does the column even exist?
+    def sync_check():
+        from database import engine
+        inspector = inspect(engine)
+        return 'license_key' in [c['name'] for c in inspector.get_columns('ai_configs')]
+    
+    import asyncio
+    column_exists = await asyncio.to_thread(sync_check)
+    if not column_exists:
+        return {"status": "missing", "payload": None, "warning": "Migration pending"}
     
     result = await db.execute(select(AIConfig).filter(AIConfig.is_active == True))
     config = result.scalars().first()

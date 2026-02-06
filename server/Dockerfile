@@ -19,7 +19,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 COPY . .
 
+RUN chmod +x entrypoint.sh
 EXPOSE 8000
 
-# Use 1 worker for SQLite to avoid lock contention and duplicate background tasks
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# Use the entrypoint script to run migrations before starting the server
+ENTRYPOINT ["/app/entrypoint.sh"]

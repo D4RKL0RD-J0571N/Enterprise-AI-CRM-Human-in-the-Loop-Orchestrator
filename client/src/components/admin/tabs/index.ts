@@ -8,3 +8,4 @@ export { SandboxTab } from "./SandboxTab";
 export { AuditTab } from "./AuditTab";
 export { SecretsTab } from "./SecretsTab";
 export { BrandingTab } from './BrandingTab';
+export { LicenseTab } from './LicenseTab';

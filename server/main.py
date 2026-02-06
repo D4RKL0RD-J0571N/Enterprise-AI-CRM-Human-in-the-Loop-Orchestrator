@@ -70,6 +70,10 @@ async def license_enforcer(request: Request, call_next):
         "/admin/license" # Crucial: Allow uploading the key!
     ]
     
+    # Skip OPTIONS requests (CORS preflight)
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     # Root path
     if request.url.path == "/" or request.url.path == "":
         return await call_next(request)
@@ -80,16 +84,24 @@ async def license_enforcer(request: Request, call_next):
 
     # For all other routes, verify license
     try:
-        # Retrieve License Key from DB (Synchronous due tomiddleware constraints or use async session properly)
-        # Using a fresh sync session for the simplistic middleware check
+        # Retrieve License Key from DB
         with SessionLocal() as db:
+            # First, check if the table and column exist to avoid 500 errors during migration lags
+            from sqlalchemy import inspect
+            inspector = inspect(engine)
+            if 'ai_configs' not in inspector.get_table_names():
+                return await call_next(request) # Allow setup
+                
+            columns = [c['name'] for c in inspector.get_columns('ai_configs')]
+            if 'license_key' not in columns:
+                # Column doesn't exist yet, likely a migration is pending or running
+                # We allow the request to proceed to avoid total lockout during startup
+                return await call_next(request)
+
             result = db.execute(select(AIConfig).filter(AIConfig.is_active == True))
             config = result.scalars().first()
             
-            # If no config or no license key stored (we will add license_key field to AIConfig next)
-            # For now, we assume it might be missing
-            if not config or not hasattr(config, "license_key") or not config.license_key:
-                # If no license is found, block functional routes
+            if not config or not config.license_key:
                  return JSONResponse(
                     status_code=402, 
                     content={"detail": "No License Key Found. Please activate your product in the Admin Panel."}
@@ -99,7 +111,7 @@ async def license_enforcer(request: Request, call_next):
             LicensingService.verify_license(config.license_key)
             
     except Exception as e:
-        # If verification fails, return 402 Payment Required
+        logger.error(f"License enforcement error: {e}")
         return JSONResponse(
             status_code=402, 
             content={"detail": str(e)}
