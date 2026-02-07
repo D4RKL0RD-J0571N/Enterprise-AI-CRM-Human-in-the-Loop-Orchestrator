@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import whatsapp, websocket, conversations, admin, auth, system
+from routers import whatsapp, websocket, conversations, admin, auth, system, ecommerce, clients, notifications, search, dashboard
 from database import engine, Base
 from prometheus_client import make_asgi_app
 from logger import setup_logger
@@ -89,6 +89,10 @@ async def license_enforcer(request: Request, call_next):
 
     # For all other routes, verify license
     try:
+        # 0. Bypass if DEV_MODE is active
+        if os.getenv("DEV_MODE") == "true":
+            return await call_next(request)
+
         # Retrieve License Key from DB
         with SessionLocal() as db:
             # First, check if the table and column exist to avoid 500 errors during migration lags
@@ -129,6 +133,11 @@ app.include_router(whatsapp.router)
 app.include_router(websocket.router)
 app.include_router(conversations.router)
 app.include_router(admin.router)
+app.include_router(ecommerce.router)
+app.include_router(clients.router)
+app.include_router(notifications.router)
+app.include_router(search.router)
+app.include_router(dashboard.router)
 app.include_router(system.router)
 
 # Prometheus Metrics

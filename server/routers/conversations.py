@@ -7,7 +7,7 @@ from models import Client, Conversation, Message, AIConfig, User, AuditLog
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 from logger import setup_logger
-from services.whatsapp_service import WhatsAppService
+from services.messaging_hub import MessagingHubService
 from routers.auth import get_current_user
 import datetime
 import json
@@ -42,6 +42,7 @@ class ConversationSummary(BaseModel):
     is_pinned: bool = False
     auto_ai_enabled: bool = True
     has_pending: bool = False
+    channel: str = "whatsapp"
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -62,6 +63,7 @@ class BulkMessageActionRequest(BaseModel):
 class ClientInit(BaseModel):
     phone_number: str
     name: Optional[str] = None
+    channel: Optional[str] = "whatsapp"
 
 @router.post("/initiate")
 async def initiate_conversation(init: ClientInit, db: AsyncSession = Depends(get_async_db)):
@@ -82,7 +84,7 @@ async def initiate_conversation(init: ClientInit, db: AsyncSession = Depends(get
     conv = result.scalars().first()
     
     if not conv:
-        conv = Conversation(client_id=client.id, is_active=True)
+        conv = Conversation(client_id=client.id, is_active=True, channel=init.channel or "whatsapp")
         db.add(conv)
         await db.commit()
         await db.refresh(conv)
@@ -132,7 +134,8 @@ async def get_conversations(db: AsyncSession = Depends(get_async_db)):
                 "is_archived": conv.is_archived,
                 "is_pinned": conv.is_pinned,
                 "auto_ai_enabled": conv.auto_ai_enabled,
-                "has_pending": has_pending
+                "has_pending": has_pending,
+                "channel": conv.channel or "whatsapp"
             })
             
     # Sort by pinned first, then time desc
@@ -169,6 +172,46 @@ async def approve_message(message_id: int, db: AsyncSession = Depends(get_async_
         raise HTTPException(status_code=404, detail="Message not found")
         
     msg.status = "sent"
+    
+    # --- AUTO-ORDER CREATION ---
+    metadata = json.loads(msg.metadata_json or "{}")
+    if metadata.get("requires_order_creation"):
+        try:
+            from models import Order, Product
+            order_items = metadata.get("order_details", [])
+            if order_items:
+                total_amount = 0
+                processed_items = []
+                for item in order_items:
+                    # Verify product and price
+                    pid = item.get("product_id")
+                    res = await db.execute(select(Product).filter(Product.id == pid))
+                    product = res.scalars().first()
+                    if product:
+                        qty = item.get("quantity", 1)
+                        price = product.price # Use actual DB price
+                        total_amount += price * qty
+                        processed_items.append({
+                            "product_id": product.id,
+                            "name": product.name,
+                            "quantity": qty,
+                            "price": price
+                        })
+                
+                if processed_items:
+                    new_order = Order(
+                        client_id=msg.conversation.client_id,
+                        total_amount=total_amount,
+                        currency="CRC", # Default for now
+                        items_json=json.dumps(processed_items),
+                        status="pending"
+                    )
+                    db.add(new_order)
+                    logger.info(f"AUTO-ORDER: Created Order for Client {msg.conversation.client_id} from Message {message_id}")
+        except Exception as e:
+            logger.error(f"Failed to auto-create order from message {message_id}: {e}")
+    # ---------------------------
+
     await db.commit()
     MESSAGE_APPROVALS_TOTAL.inc()
     logger.info(f"Message {message_id} APPROVED and marked as sent")
@@ -192,10 +235,16 @@ async def approve_message(message_id: int, db: AsyncSession = Depends(get_async_
         config_dict = {
             "whatsapp_driver": config.whatsapp_driver,
             "whatsapp_api_token": config.whatsapp_api_token,
-            "whatsapp_phone_id": config.whatsapp_phone_id
+            "whatsapp_phone_id": config.whatsapp_phone_id,
+            "email_driver": config.email_driver,
+            "meta_driver": config.meta_driver,
+            "email_smtp_server": config.email_smtp_server,
+            "facebook_api_token": config.facebook_api_token
         }
-        driver = WhatsAppService.get_driver(config_dict)
-        external_id = await driver.send_message(to=client_phone, text=msg.content)
+        # Use MessagingHub to detect channel and send
+        adapter = MessagingHubService.get_adapter(msg.conversation.channel, config_dict)
+        external_id = await adapter.send_message(to=client_phone, text=msg.content)
+        
         if isinstance(external_id, str):
             msg.external_id = external_id
             await db.commit()
@@ -429,10 +478,16 @@ async def send_human_message(conversation_id: int, req: MessageCreate, db: Async
         config_dict = {
             "whatsapp_driver": config.whatsapp_driver,
             "whatsapp_api_token": config.whatsapp_api_token,
-            "whatsapp_phone_id": config.whatsapp_phone_id
+            "whatsapp_phone_id": config.whatsapp_phone_id,
+            "email_driver": config.email_driver,
+            "meta_driver": config.meta_driver,
+            "email_smtp_server": config.email_smtp_server,
+            "facebook_api_token": config.facebook_api_token
         }
-        driver = WhatsAppService.get_driver(config_dict)
-        external_id = await driver.send_message(to=client_phone, text=msg.content)
+        # Use MessagingHub to detect channel and send
+        adapter = MessagingHubService.get_adapter(conv.channel, config_dict)
+        external_id = await adapter.send_message(to=client_phone, text=msg.content)
+        
         if isinstance(external_id, str):
             msg.external_id = external_id
             await db.commit()

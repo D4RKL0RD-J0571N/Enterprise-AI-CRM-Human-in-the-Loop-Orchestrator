@@ -1,3 +1,5 @@
+[English](README.md) | [Español](README.es.md)
+
 # Enterprise AI CRM: Human-in-the-Loop Orchestrator
 
 A production-grade AI orchestration system integrating Local LLMs with WhatsApp for compliant, observable, and human-supervised customer communication.  
@@ -63,12 +65,12 @@ The application uses a **Hybrid Configuration Model** with the following precede
 
 | Variable | Scope | Description | Default |
 |----------|-------|-------------|---------|
-| `VITE_API_URL` | Frontend | Base URL for the API. **Must be accessible by the client browser.** | `http://localhost:8000` |
+| `VITE_API_URL` | Frontend | Base URL for the API. **Must be accessible by the client browser.** | `http://127.0.0.1:8000` |
 | `OPENAI_API_BASE` | Backend | Default LLM endpoint URL. | `http://localhost:1234/v1` |
 | `DEFAULT_PRIMARY_COLOR` | Backend | Default primary brand color (Hex). | `#2563eb` |
-| `ALLOWED_ORIGINS` | Backend | CORS allowed origins (comma-separated). | `http://localhost:5173` |
+| `ALLOWED_ORIGINS` | Backend | CORS allowed origins (comma-separated). | `http://127.0.0.1:5173,http://localhost:5173` |
 
-> **Pro Tip:** When deploying with Docker, ensure `VITE_API_URL` points to the public address/IP of your server, not `localhost` or the internal Docker network IP, as the frontend code runs in the *user's browser*.
+> **Pro Tip:** Connection issues are often resolved by using `127.0.0.1` instead of `localhost` for API calls on Windows environments. The system is standardized to use `http://127.0.0.1:8000`.
 
 ---
 
@@ -213,26 +215,34 @@ npm run dev
 3. Start local API server on port 1234
 
 ### 🧪 Testing and Validation
-- Run tests: `pytest -v`
-- Static checks: `ruff check .` `mypy server/` `black --check .`
+The system features a comprehensive multi-layer test suite:
 
-### 📈 Observability & Metrics
-The system exposes Prometheus-compatible metrics at `/metrics`.
+1. **Backend Unit Tests**: (Pytest) Covers Auth, Payments, AI Agent, and CRMs.
+   ```bash
+   pytest -v
+   ```
+2. **Integration Scripts**: Direct API verification for Products, Clients, and Orders.
+   ```bash
+   python test_products.py && python test_clients.py && python test_orders.py
+   ```
+3. **E2E Tests (Playwright)**: Full browser flow verification (Login -> Dashboard -> Chat).
+   ```bash
+   cd client && npx playwright test --grep @stable --workers=1
+   ```
 
-**Key Metrics:**
-- `ai_requests_total`: Total AI generation requests.
-- `security_violations_total`: Blocked triggers (Political, Medical, etc).
-- `request_latency_ms`: Histogram of response times.
+> [!IMPORTANT]
+> **Data Seeding**: Always run `python server/seed_config.py` after a database reset to ensure the system starts with a valid operational configuration and sample data.
 
-**Access:**
-```bash
-curl http://localhost:8000/metrics
-```
+### 🚀 CI/CD Integration
+Integrated GitHub Actions workflows:
+- **`ci.yml`**: Backend unit tests and frontend build verification.
+- **`qa.yml`**: Full-stack E2E orchestration with automated seeding and Playwright verification.
 
 ### ⚙️ Configuration & Secrets
 API Keys and sensitive configuration are now managed via the Database/Admin API, not `env` variables.
-- navigate to `http://localhost:5173/admin` (Frontend) to configure logic.
+- navigate to `http://localhost:5174/admin` (Frontend) to configure logic.
 - Keys are migrated from `.env` on first run via `migrate_secrets.py`.
+- **CI Secrets**: Ensure `ENCRYPTION_KEY` is added to GitHub Secrets for successful CI builds.
 
 ---
 

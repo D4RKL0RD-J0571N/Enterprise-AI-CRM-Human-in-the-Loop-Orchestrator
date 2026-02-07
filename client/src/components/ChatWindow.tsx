@@ -75,7 +75,7 @@ const ChatWindow = memo(({
     timezone,
     onBulkDelete
 }: ChatWindowProps) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const [inputValue, setInputValue] = useState("");
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -85,10 +85,10 @@ const ChatWindow = memo(({
     const { show } = useContextMenu({ id: `${MESSAGE_MENU_ID}-${conversationId}` });
 
     const formatTime = (ts: string) => {
-        if (!ts) return "Just now";
+        if (!ts) return t('common.just_now', { defaultValue: 'Just now' });
         const isoTs = ts.includes('Z') || ts.includes('+') ? ts : ts.replace(' ', 'T') + 'Z';
         try {
-            return new Date(isoTs).toLocaleTimeString('es-CR', {
+            return new Date(isoTs).toLocaleTimeString(i18n.language, {
                 hour: '2-digit',
                 minute: '2-digit',
                 timeZone: timezone || 'UTC'
@@ -152,18 +152,18 @@ const ChatWindow = memo(({
                 onMouseDown={onDragStart}
             >
                 <div className="flex items-center gap-3 pointer-events-none">
-                    <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-white font-black shadow-lg shadow-[var(--brand-primary)]/20"
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black shadow-lg shadow-[var(--brand-primary)]/20"
                         style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary))' }}
                     >
                         {clientName.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                        <h3 className="text-sm font-black dark:text-white flex items-center gap-2 select-none">
+                        <h3 className="text-base font-black dark:text-white flex items-center gap-2 select-none">
                             {clientName}
-                            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                            <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span>
                         </h3>
-                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest flex items-center gap-1 tabular-nums select-none">
-                            <Clock className="w-3 h-3" /> ID: {conversationId}
+                        <p className="text-[11px] text-gray-500 font-bold uppercase tracking-widest flex items-center gap-1.5 tabular-nums select-none">
+                            <Clock className="w-3.5 h-3.5" /> ID: {conversationId}
                         </p>
                     </div>
                 </div>
@@ -171,10 +171,10 @@ const ChatWindow = memo(({
                     <button
                         onClick={(e) => { e.stopPropagation(); onToggleAI?.(); }}
                         aria-label={autoAIEnabled ? "Disable AI Auto-respond" : "Enable AI Auto-respond"}
-                        className={`p-1.5 rounded-lg transition-all flex items-center gap-1.5 hover-premium select-none ${autoAIEnabled ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'text-amber-600 bg-amber-50 dark:bg-amber-900/20'}`}
+                        className={`p-2 rounded-lg transition-all flex items-center gap-2 hover-premium select-none ${autoAIEnabled ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'text-amber-600 bg-amber-50 dark:bg-amber-900/20'}`}
                     >
-                        <Sparkles className={`w-3.5 h-3.5 ${autoAIEnabled ? 'animate-pulse' : 'opacity-40'}`} />
-                        <span className="text-[10px] font-bold uppercase tracking-tighter hidden sm:inline">
+                        <Sparkles className={`w-4 h-4 ${autoAIEnabled ? 'animate-pulse' : 'opacity-40'}`} />
+                        <span className="text-[11px] font-black uppercase tracking-tighter hidden sm:inline">
                             {autoAIEnabled ? t('chat.ai_auto') : t('chat.manual')}
                         </span>
                     </button>
@@ -226,9 +226,9 @@ const ChatWindow = memo(({
                                     onContextMenu={(e) => handleContextMenu(e, m.id, m.text || m.content || "")}
                                 >
                                     <div className="flex justify-between items-center mb-1 gap-2">
-                                        <div className="flex items-center gap-1">
-                                            {isAI ? <Bot className="w-3 h-3 opacity-70" /> : <User className="w-3 h-3 opacity-70" />}
-                                            <span className="text-[10px] font-black uppercase tracking-widest opacity-70">{label}</span>
+                                        <div className="flex items-center gap-1.5">
+                                            {isAI ? <Bot className="w-3.5 h-3.5 opacity-70" /> : <User className="w-3.5 h-3.5 opacity-70" />}
+                                            <span className="text-[11px] font-black uppercase tracking-widest opacity-80">{label}</span>
                                         </div>
                                     </div>
 
@@ -259,7 +259,7 @@ const ChatWindow = memo(({
                                             </div>
                                         </div>
                                     ) : (
-                                        <p className="text-sm font-medium leading-relaxed">{m.text || m.content}</p>
+                                        <p className="text-base font-semibold leading-relaxed">{m.text || m.content}</p>
                                     )}
 
                                     {deletingId === m.id && (
@@ -277,9 +277,9 @@ const ChatWindow = memo(({
                                         </div>
                                     )}
 
-                                    <div className={`text-[9px] mt-2 flex items-center gap-2 font-mono tabular-nums ${alignRight ? "justify-end opacity-80" : "justify-start opacity-60"}`}>
+                                    <div className={`text-[11px] mt-2.5 flex items-center gap-2 font-mono tabular-nums ${alignRight ? "justify-end opacity-85" : "justify-start opacity-70"}`}>
                                         {formatTime(m.timestamp)}
-                                        {m.status === 'sent' && !isPending && <Check className="w-3 h-3" />}
+                                        {m.status === 'sent' && !isPending && <Check className="w-4 h-4" />}
                                     </div>
                                     {isPending && (
                                         <div className="mt-3 flex gap-2 pt-2 border-t border-amber-200 dark:border-amber-800">

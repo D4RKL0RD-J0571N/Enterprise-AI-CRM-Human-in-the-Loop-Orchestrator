@@ -9,3 +9,6 @@ export { AuditTab } from "./AuditTab";
 export { SecretsTab } from "./SecretsTab";
 export { BrandingTab } from './BrandingTab';
 export { LicenseTab } from './LicenseTab';
+export { ProductsTab } from './ProductsTab';
+export { OrdersTab } from './OrdersTab';
+export { ChannelsTab } from './ChannelsTab';

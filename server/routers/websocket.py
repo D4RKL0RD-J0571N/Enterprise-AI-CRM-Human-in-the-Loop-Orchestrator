@@ -58,7 +58,6 @@ class ConnectionManager:
                 self.disconnect(connection)
 
     async def broadcast_security_alert(self, phone: str, reason: str):
-        import json
         alert = {
             "type": "security_alert",
             "phone": phone,
@@ -66,6 +65,18 @@ class ConnectionManager:
             "timestamp": time.time()
         }
         await self.broadcast(json.dumps(alert))
+
+    async def broadcast_notification(self, notification_data: dict):
+        """
+        Broadcasting generic notifications for the UI NotificationCenter.
+        Expects: {type, severity, title, description}
+        """
+        payload = {
+            "type": "notification",
+            "data": notification_data,
+            "timestamp": time.time()
+        }
+        await self.broadcast(json.dumps(payload))
 
 manager = ConnectionManager()
 router = APIRouter(prefix="/ws", tags=["WebSocket"])

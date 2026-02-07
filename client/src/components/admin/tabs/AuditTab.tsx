@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { useTranslation } from "react-i18next";
 import { Shield, Clock, Brain, AlertTriangle, CheckCircle, Activity } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { SecurityAudit, AuditLogItem } from "../../../types/admin";
 
 interface Props {
@@ -26,13 +26,13 @@ export const AuditTab = ({ audits, auditLogs, refreshAudits }: Props) => {
                     onClick={() => setView("security")}
                     className={`flex items-center gap-2 px-6 py-2 rounded-xl text-xs font-black transition-all ${view === "security" ? "bg-white dark:bg-gray-700 shadow-md text-blue-500" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"}`}
                 >
-                    <Shield className="w-4 h-4" /> {t('admin.audit.view_security')}
+                    <Shield className="w-4 h-4" /> {t('admin.audit.security_scans') || "AI SECURITY SCANS"}
                 </button>
                 <button
                     onClick={() => setView("operational")}
                     className={`flex items-center gap-2 px-6 py-2 rounded-xl text-xs font-black transition-all ${view === "operational" ? "bg-white dark:bg-gray-700 shadow-md text-indigo-500" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"}`}
                 >
-                    <Activity className="w-4 h-4" /> {t('admin.audit.view_operational')}
+                    <Activity className="w-4 h-4" /> {t('admin.audit.operational_registry') || "OPERATIONAL REGISTRY"}
                 </button>
             </div>
 
@@ -43,21 +43,21 @@ export const AuditTab = ({ audits, auditLogs, refreshAudits }: Props) => {
                         <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border dark:border-gray-800 shadow-sm">
                             <div className="flex items-center gap-3 mb-2">
                                 <Shield className="w-5 h-5 text-blue-500" />
-                                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('admin.audit.total_scans')}</span>
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('admin.audit.total_scans') || "Total Scans"}</span>
                             </div>
                             <div className="text-3xl font-black dark:text-white">{(audits || []).length}</div>
                         </div>
                         <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border dark:border-gray-800 shadow-sm">
                             <div className="flex items-center gap-3 mb-2">
                                 <AlertTriangle className="w-5 h-5 text-red-500" />
-                                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('admin.audit.blocked')}</span>
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('admin.audit.blocked') || "Blocked"}</span>
                             </div>
                             <div className="text-3xl font-black text-red-500">{(audits || []).filter(a => a.status === 'Blocked').length}</div>
                         </div>
                         <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border dark:border-gray-800 shadow-sm">
                             <div className="flex items-center gap-3 mb-2">
                                 <Clock className="w-5 h-5 text-amber-500" />
-                                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('admin.audit.avg_latency')}</span>
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('admin.audit.avg_latency') || "Avg. Latency"}</span>
                             </div>
                             <div className="text-3xl font-black dark:text-white">
                                 {(audits || []).length > 0 ? Math.round((audits || []).reduce((acc, current) => acc + (current.latency_ms || 0), 0) / (audits || []).length) : 0}ms
@@ -66,7 +66,7 @@ export const AuditTab = ({ audits, auditLogs, refreshAudits }: Props) => {
                         <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border dark:border-gray-800 shadow-sm">
                             <div className="flex items-center gap-3 mb-2">
                                 <Brain className="w-5 h-5 text-purple-500" />
-                                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('admin.audit.total_tokens')}</span>
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('admin.audit.total_tokens') || "Total Tokens"}</span>
                             </div>
                             <div className="text-3xl font-black dark:text-white">
                                 {(audits || []).reduce((acc, current) => acc + (current.tokens_used || 0), 0)}
@@ -79,9 +79,9 @@ export const AuditTab = ({ audits, auditLogs, refreshAudits }: Props) => {
                         <div className="p-6 border-b dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50">
                             <div>
                                 <h2 className="text-lg font-black dark:text-white flex items-center gap-2">
-                                    <Shield className="w-5 h-5 text-blue-500" /> {t('admin.audit.security_logs_title')}
+                                    <Shield className="w-5 h-5 text-blue-500" /> {t('admin.audit.security_logs_title') || "Security Audit Logs"}
                                 </h2>
-                                <p className="text-xs text-gray-500 mt-1">{t('admin.audit.security_logs_desc')}</p>
+                                <p className="text-xs text-gray-500 mt-1">{t('admin.audit.security_logs_desc') || "Real-time monitoring of AI domains and safety policies"}</p>
                             </div>
                         </div>
 
@@ -89,18 +89,18 @@ export const AuditTab = ({ audits, auditLogs, refreshAudits }: Props) => {
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-gray-50/50 dark:bg-gray-800/50 text-[10px] uppercase font-black text-gray-400 tracking-widest border-b dark:border-gray-800">
-                                        <th className="px-6 py-4">{t('admin.audit.table_timestamp')}</th>
-                                        <th className="px-6 py-4">{t('admin.audit.table_input')}</th>
-                                        <th className="px-6 py-4">{t('admin.audit.table_domain_intent')}</th>
-                                        <th className="px-6 py-4">{t('admin.audit.table_status')}</th>
-                                        <th className="px-6 py-4">{t('admin.audit.table_latency')}</th>
-                                        <th className="px-6 py-4">{t('admin.audit.table_model')}</th>
+                                        <th className="px-6 py-4">{t('common.timestamp') || "Timestamp"}</th>
+                                        <th className="px-6 py-4">{t('admin.audit.message') || "Input Message"}</th>
+                                        <th className="px-6 py-4">{t('admin.audit.domain_intent') || "Domain / Intent"}</th>
+                                        <th className="px-6 py-4">{t('common.status') || "Status"}</th>
+                                        <th className="px-6 py-4">{t('admin.audit.latency') || "Latency"}</th>
+                                        <th className="px-6 py-4">{t('admin.audit.model') || "Model"}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y dark:divide-gray-800">
                                     {audits.length === 0 ? (
                                         <tr>
-                                            <td colSpan={6} className="px-6 py-12 text-center text-gray-400 italic font-medium">{t('admin.audit.no_security_logs')}</td>
+                                            <td colSpan={6} className="px-6 py-12 text-center text-gray-400 italic font-medium">{t('admin.audit.no_scans') || "No security scans found"}</td>
                                         </tr>
                                     ) : audits.map((audit) => (
                                         <tr key={audit.id} className="group hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
@@ -126,7 +126,7 @@ export const AuditTab = ({ audits, auditLogs, refreshAudits }: Props) => {
                                                 <div className="flex items-center gap-2">
                                                     {audit.status === 'Passed' ? <CheckCircle className="w-4 h-4 text-emerald-500" /> : <Shield className="w-4 h-4 text-red-500" />}
                                                     <span className={`text-[10px] font-black uppercase ${audit.status === 'Passed' ? 'text-emerald-500' : 'text-red-500'}`}>
-                                                        {audit.status === 'Passed' ? t('admin.audit.status_passed') : t('admin.audit.status_blocked')}
+                                                        {audit.status === 'Passed' ? (t('admin.audit.status_passed') || "Passed") : (t('admin.audit.status_blocked') || "Blocked")}
                                                     </span>
                                                 </div>
                                             </td>
@@ -154,9 +154,9 @@ export const AuditTab = ({ audits, auditLogs, refreshAudits }: Props) => {
                         <div className="p-6 border-b dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50">
                             <div>
                                 <h2 className="text-lg font-black dark:text-white flex items-center gap-2">
-                                    <Activity className="w-5 h-5 text-indigo-500" /> {t('admin.audit.operational_logs_title')}
+                                    <Activity className="w-5 h-5 text-indigo-500" /> {t('admin.audit.operational_logs_title') || "Operational Action Registry"}
                                 </h2>
-                                <p className="text-xs text-gray-500 mt-1">{t('admin.audit.operational_logs_desc')}</p>
+                                <p className="text-xs text-gray-500 mt-1">{t('admin.audit.operational_logs_desc') || "Immutable log of operator actions and system changes"}</p>
                             </div>
                         </div>
 
@@ -164,17 +164,17 @@ export const AuditTab = ({ audits, auditLogs, refreshAudits }: Props) => {
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-gray-50/50 dark:bg-gray-800/50 text-[10px] uppercase font-black text-gray-400 tracking-widest border-b dark:border-gray-800">
-                                        <th className="px-6 py-4">{t('admin.audit.table_timestamp')}</th>
-                                        <th className="px-6 py-4">{t('admin.audit.table_operator')}</th>
-                                        <th className="px-6 py-4">{t('admin.audit.table_action')}</th>
-                                        <th className="px-6 py-4">{t('admin.audit.table_resource')}</th>
-                                        <th className="px-6 py-4">{t('admin.audit.table_details')}</th>
+                                        <th className="px-6 py-4">{t('common.timestamp') || "Timestamp"}</th>
+                                        <th className="px-6 py-4">{t('admin.audit.operator') || "Operator"}</th>
+                                        <th className="px-6 py-4">{t('admin.audit.action') || "Action"}</th>
+                                        <th className="px-6 py-4">{t('admin.audit.resource') || "Resource"}</th>
+                                        <th className="px-6 py-4">{t('admin.audit.details') || "Details"}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y dark:divide-gray-800">
                                     {auditLogs.length === 0 ? (
                                         <tr>
-                                            <td colSpan={5} className="px-6 py-12 text-center text-gray-400 italic font-medium">{t('admin.audit.no_operational_logs')}</td>
+                                            <td colSpan={5} className="px-6 py-12 text-center text-gray-400 italic font-medium">{t('admin.audit.no_operational_logs') || "No operational logs found"}</td>
                                         </tr>
                                     ) : auditLogs.map((log) => (
                                         <tr key={log.id} className="group hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">

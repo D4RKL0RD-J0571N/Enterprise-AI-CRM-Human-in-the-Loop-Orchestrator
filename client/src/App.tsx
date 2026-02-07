@@ -1,58 +1,87 @@
-import { useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import ChatDashboard from "./components/ChatDashboard";
-import AdminConfig from "./components/AdminConfig";
-import { useTranslation } from "react-i18next";
-import { BrandingProvider, useBrandingContext } from "./context/BrandingContext";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { BrandingProvider } from "./context/BrandingContext";
 import LoginPage from "./components/LoginPage";
+import DashboardLayout from "./layouts/DashboardLayout";
+import DashboardHome from "./pages/DashboardHome";
+import ProductsPage from "./pages/ProductsPage";
+import OrdersPage from "./pages/OrdersPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
+import SettingsLayout from "./layouts/SettingsLayout";
+import OrganizationSettings from "./pages/settings/OrganizationSettings";
+import IntelligenceSettings from "./pages/settings/IntelligenceSettings";
+import ChannelsSettings from "./pages/settings/ChannelsSettings";
+import SystemSettings from "./pages/settings/SystemSettings";
+import ClientsPage from "./pages/ClientsPage";
 
-function MainLayout() {
-  const { t } = useTranslation();
-  const [currentView, setCurrentView] = useState<"chat" | "admin">("chat");
-  const { config, refreshBranding } = useBrandingContext();
-  const { isAuthenticated, logout, user } = useAuth();
+// Wrapper to handle navigation prop for legacy components
+const ChatDashboardWrapper = () => {
+  const navigate = useNavigate();
+  return <ChatDashboard onNavigate={(view) => {
+    if (view === 'admin') navigate('/dashboard/settings/organization');
+    else if (view === 'chat') navigate('/dashboard/chat');
+  }} />;
+};
 
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+function AppRoutes() {
+  const { isAuthenticated } = useAuth();
+
+  // Apply body background from config if needed, though usually handled by CSS variables + Layout
+  // We can leave this effect here if it was doing global style injection, but mostly BrandingContext handles it.
 
   return (
-    <div className="h-screen w-full bg-white dark:bg-[var(--brand-bg)] transition-colors duration-200 flex flex-col overflow-hidden">
-      <main className="flex-1 flex overflow-hidden">
-        {currentView === "chat" ? (
-          <ChatDashboard onNavigate={(view) => setCurrentView(view)} />
-        ) : (
-          <div className="flex-1 flex flex-col">
-            <div className="p-2 px-6 bg-white dark:bg-gray-950 flex justify-between items-center text-xs font-bold border-b dark:border-gray-800">
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setCurrentView("chat")}
-                  className="py-2 transition-opacity hover:opacity-75"
-                  style={{ color: config.primary_color || "#2563eb" }}
-                >
-                  {t('common.back_to_chat')}
-                </button>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-gray-400 opacity-50 uppercase tracking-tighter">{t('common.authenticated_as')} <span className="text-white">{user?.username}</span></span>
-                <button onClick={logout} className="text-red-500 hover:text-red-400">{t('common.logout')}</button>
-              </div>
-            </div>
-            <AdminConfig onSave={refreshBranding} />
-          </div>
-        )}
-      </main>
-    </div>
+    <Routes>
+      <Route path="/login" element={
+        isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />
+      } />
+
+      <Route path="/dashboard" element={
+        <ProtectedRoute>
+          <DashboardLayout />
+        </ProtectedRoute>
+      }>
+        <Route index element={<DashboardHome />} />
+        <Route path="chat" element={<ChatDashboardWrapper />} />
+
+        {/* Settings Module */}
+        <Route path="settings" element={<SettingsLayout />}>
+          <Route index element={<Navigate to="organization" replace />} />
+          <Route path="organization" element={<OrganizationSettings />} />
+          <Route path="intelligence" element={<IntelligenceSettings />} />
+          <Route path="channels" element={<ChannelsSettings />} />
+          <Route path="developers" element={<SystemSettings />} />
+        </Route>
+
+        {/* Core Business Modules */}
+        <Route path="products" element={<ProductsPage />} />
+        <Route path="orders" element={<OrdersPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
+
+        <Route path="clients" element={<ClientsPage />} />
+      </Route>
+
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
   );
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <BrandingProvider>
-        <MainLayout />
-      </BrandingProvider>
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <BrandingProvider>
+          <AppRoutes />
+        </BrandingProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
 

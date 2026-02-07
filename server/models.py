@@ -27,6 +27,7 @@ class Conversation(Base):
     is_archived = Column(Boolean, default=False)
     is_pinned = Column(Boolean, default=False)
     auto_ai_enabled = Column(Boolean, default=True) # Manual override for HITL
+    channel = Column(String, default="whatsapp") # whatsapp, email, instagram, messenger
     tenant_id = Column(String, default="default", index=True)
 
     client = relationship("Client", back_populates="conversations")
@@ -97,6 +98,20 @@ class AIConfig(Base):
     whatsapp_phone_id = Column(String, nullable=True)
     whatsapp_driver = Column(String, default="mock") # "mock" or "meta"
     
+    # Email Integration (SMTP)
+    email_smtp_server = Column(String, nullable=True)
+    email_smtp_port = Column(Integer, default=587)
+    email_user = Column(String, nullable=True)
+    email_password = Column(String, nullable=True)
+    email_from_name = Column(String, nullable=True)
+    email_driver = Column(String, default="mock") # "mock" or "smtp"
+
+    # Meta Integrations (Facebook / Instagram)
+    facebook_api_token = Column(String, nullable=True)
+    facebook_page_id = Column(String, nullable=True)
+    instagram_business_id = Column(String, nullable=True)
+    meta_driver = Column(String, default="mock") # "mock" or "meta"
+    
     # Global Settings
     timezone = Column(String, default="UTC") # e.g. "America/Costa_Rica"
     workspace_config = Column(String, default="{}") # JSON storage for UI layout preferences
@@ -164,13 +179,14 @@ class AIConfigSnapshot(Base):
     fallback_message = Column(Text)
     preferred_model = Column(String)
     
-    # Snapshot WhatsApp Integration
-    whatsapp_driver = Column(String, default="mock")
-    whatsapp_phone_id = Column(String, nullable=True)
-    
     # Snapshot Branding
     logo_url = Column(String, nullable=True)
     primary_color = Column(String)
+
+    # Snapshot Channels
+    whatsapp_driver = Column(String, default="mock")
+    email_driver = Column(String, default="mock")
+    meta_driver = Column(String, default="mock")
     
     # Advanced Version Management
     version_name = Column(String, nullable=True)
@@ -204,3 +220,49 @@ class AuditLog(Base):
     details = Column(Text, nullable=True) # JSON or descriptive text
     
     user = relationship("User")
+
+
+class Product(Base):
+    __tablename__ = "products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    description = Column(Text, nullable=True)
+    price = Column(Integer) # In cents (to avoid float issues)
+    currency = Column(String, default="CRC")
+    stock_quantity = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    tenant_id = Column(String, default="default", index=True)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id"))
+    total_amount = Column(Integer) # In cents
+    currency = Column(String, default="CRC")
+    status = Column(String, default="pending") # pending, paid, cancelled, shipped
+    items_json = Column(Text) # JSON list of {product_id, quantity, price_at_purchase}
+    external_id = Column(String, nullable=True, index=True) # ID for external payment providers (Stripe/MP)
+    payment_method = Column(String, nullable=True) # "stripe", "mercadopago"
+    tenant_id = Column(String, default="default", index=True)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    client = relationship("Client")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    type = Column(String) # ai, sales, system, inventory
+    severity = Column(String) # info, warning, critical
+    title = Column(String)
+    description = Column(Text)
+    is_read = Column(Boolean, default=False)
+    timestamp = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    tenant_id = Column(String, default="default", index=True)
+    metadata_json = Column(Text, default="{}") # Contextual data like client_id, order_id, etc.

@@ -1,12 +1,30 @@
 {
+    "sidebar": {
+        "dashboard": "Dashboard",
+        "messages": "Messages",
+        "products": "Products",
+        "orders": "Orders",
+        "clients": "Clients",
+        "analytics": "Analytics",
+        "settings": "Settings",
+        "enterprise_plan": "Enterprise Plan",
+        "unlimited_messages": "Unlimited Messages",
+        "inbox": "Inbox",
+        "archived_view": "ARCHIVED VIEW",
+        "search_placeholder": "Search chats...",
+        "no_conversations": "No {{status}} conversations found.",
+        "ai_config": "AI Config",
+        "new_message": "New Message"
+    },
     "common": {
-        "save": "Save",
+        "save": "Save Changes",
         "saved": "Saved!",
-        "saving": "Saving...",
-        "error": "Error",
         "cancel": "Cancel",
-        "delete": "Delete",
         "edit": "Edit",
+        "delete": "Delete",
+        "actions": "Actions",
+        "just_now": "Just now",
+        "time_ago": "{{time}} ago",
         "active": "Active",
         "disabled": "Disabled",
         "loading": "Loading...",
@@ -14,7 +32,6 @@
         "reject": "Reject",
         "back": "Back",
         "back_to_chat": "← Back to Chat",
-        "just_now": "Just now",
         "copy_text": "Copy Text",
         "edit_message": "Edit Message",
         "delete_message": "Delete Message",
@@ -26,7 +43,17 @@
         "no": "No",
         "selected": "Selected",
         "authenticated_as": "Authenticated as",
-        "logout": "Logout"
+        "logout": "Logout",
+        "new": "New",
+        "take_action": "Take Action",
+        "synchronizing": "Synchronizing...",
+        "all_caught_up": "All caught up!",
+        "view_all_logs": "View All Activity Log",
+        "search_placeholder": "Search clients, orders...",
+        "no_results": "No results found for",
+        "admin_role": "Admin",
+        "integrations": "Integrations",
+        "settings": "Settings"
     },
     "auth": {
         "title": "Access Control",
@@ -40,14 +67,6 @@
         "error_failed": "Authentication Failed",
         "error_unreachable": "Server unreachable. Ensure backend is running.",
         "role_access": "{{role}} Access"
-    },
-    "sidebar": {
-        "inbox": "Inbox",
-        "archived_view": "ARCHIVED VIEW",
-        "search_placeholder": "Search chats...",
-        "no_conversations": "No {{status}} conversations found.",
-        "ai_config": "AI Config",
-        "new_message": "New Message"
     },
     "new_chat_modal": {
         "title": "New Conversation",
@@ -87,20 +106,24 @@
             "commercial_domain": "Commercial Domain",
             "auto_approved": "Auto-Approved",
             "blocked_violation": "Blocked Violation",
-            "intent_analytics": "Intent Analytics"
+            "intent_analytics": "Intent Analytics",
+            "system_desc": "Manage API keys, snapshots, and view audit logs."
         },
         "tabs": {
             "context": "Identity",
             "branding": "Branding",
-            "behavior": "Behavior",
-            "advanced": "Intelligence",
-            "datasets": "Datasets",
-            "sandbox": "Sandbox",
+            "behavior": "Core Behavior",
+            "advanced": "Advanced Logic",
+            "knowledge": "Knowledge Base",
+            "sandbox": "AI Sandbox",
             "secrets": "Secrets",
             "audit": "Security Logs",
             "snapshots": "History",
             "license": "License",
             "analytics": "Analytics"
+        },
+        "organization": {
+            "desc": "Manage your business identity and visual presence."
         },
         "branding": {
             "title": "Branding & Visual Identity",
@@ -139,6 +162,7 @@
         },
         "fields": {
             "business_name": "Business Name",
+            "business_description": "Business Description",
             "description": "Description",
             "tone": "Tone of Voice",
             "business_tone": "Business Tone",
@@ -309,6 +333,7 @@
             "title": "License Management",
             "subtitle": "Manage your product license and plan entitlements.",
             "status": "License Status",
+            "loading": "Loading...",
             "active": "Active",
             "missing": "Missing",
             "invalid": "Invalid",
@@ -395,5 +420,100 @@
         "client_phone_placeholder": "Client Phone (e.g. +1234567890 or Mario)",
         "message_placeholder": "Client message...",
         "whatsapp_help": "Test the full client-AI flow by simulating incoming WhatsApp messages. This triggers the real webhook, guardrails, and AI response generation."
+    },
+    "dashboard": {
+        "title": "Welcome back",
+        "subtitle": "Here's what's happening with your store today.",
+        "stats": {
+            "revenue": "Platform Revenue",
+            "orders": "Active Orders",
+            "interactions": "Interactions",
+            "confidence": "AI Confidence",
+            "clients": "Total Clients",
+            "payment_links": "Payment Links",
+            "feedback": "Avg Feedback",
+            "response_time": "Response Time",
+            "total_clients": "Total Clients",
+            "active_conversations": "Active Conversations"
+        },
+        "activity": {
+            "title": "Recent Activity",
+            "subtitle": "AI Agent & System Events",
+            "empty": "No recent activity recorded.",
+            "no_details": "No additional details."
+        },
+        "recent_orders": {
+            "title": "Recent Sales",
+            "empty": "No recent orders.",
+            "order_prefix": "Order #"
+        }
+    },
+    "clients": {
+        "title": "Client Management",
+        "subtitle": "View and manage all customer interactions and history.",
+        "search_placeholder": "Search by name or phone...",
+        "table": {
+            "name": "Name",
+            "phone": "Phone",
+            "conversations": "Conversations",
+            "joined": "Joined",
+            "status": "Status",
+            "actions": "Actions",
+            "id": "ID"
+        },
+        "loading": "Loading clients...",
+        "empty_search": "No clients found matching your search.",
+        "empty_all": "No clients found. Wait for incoming messages.",
+        "active": "Active",
+        "action_hub": "Actions",
+        "actions": {
+            "send_message": "Send Message",
+            "past_orders": "Past Orders",
+            "view_profile": "View Profile",
+            "confirm_delete": "Are you sure you want to delete client",
+            "delete_client": "Delete Client"
+        }
+    },
+    "product": {
+        "create": "Create Product",
+        "name": "Name",
+        "price": "Price",
+        "stock": "Stock",
+        "status": "Status",
+        "id": "ID",
+        "active": "Active",
+        "inactive": "Inactive",
+        "syncing": "Syncing Catalog...",
+        "no_products": "No products found. Add one to get started."
+    },
+    "orders": {
+        "create": "Create Manual Order",
+        "ref": "Ref",
+        "client": "Client",
+        "products": "Products",
+        "total": "Total",
+        "status": "Status",
+        "actions": "Actions",
+        "generate_link": "Generate Link",
+        "syncing": "Syncing Orders...",
+        "filter": {
+            "all": "All",
+            "pending": "Pending",
+            "paid": "Paid",
+            "failed": "Failed"
+        },
+        "modal": {
+            "title": "Create Manual Order",
+            "select_client": "1. Select Client",
+            "choose_client": "Choose Client...",
+            "add_products": "2. Add Products",
+            "summary": "Order Summary",
+            "no_items": "No items selected",
+            "net_total": "Net Total",
+            "place_order": "Place Order",
+            "error_select": "Select a client and at least one product.",
+            "error_create": "Error creating order"
+        },
+        "more_items": "+{{count}} more"
     }
 }

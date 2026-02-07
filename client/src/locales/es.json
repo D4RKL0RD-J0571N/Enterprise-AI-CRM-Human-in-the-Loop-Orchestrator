@@ -1,4 +1,116 @@
 {
+    "sidebar": {
+        "dashboard": "Panel de Control",
+        "messages": "Mensajes",
+        "products": "Productos",
+        "orders": "Pedidos",
+        "clients": "Clientes",
+        "analytics": "Analítica",
+        "settings": "Configuración",
+        "enterprise_plan": "Plan Empresarial",
+        "unlimited_messages": "Mensajes Ilimitados",
+        "inbox": "Bandeja de Entrada",
+        "archived_view": "VISTA DE ARCHIVADOS",
+        "search_placeholder": "Buscar chats...",
+        "no_conversations": "No se encontraron conversaciones {{status}}.",
+        "ai_config": "Config. IA",
+        "new_message": "Nuevo Mensaje"
+    },
+    "dashboard": {
+        "title": "Bienvenido de nuevo",
+        "subtitle": "Esto es lo que está pasando en su tienda hoy.",
+        "stats": {
+            "revenue": "Ingresos",
+            "orders": "Pedidos Activos",
+            "interactions": "Interacciones",
+            "confidence": "Confianza IA",
+            "clients": "Clientes",
+            "payment_links": "Links de Pago",
+            "feedback": "Promedio Feedback",
+            "response_time": "Tiempo Respuesta",
+            "total_clients": "Total Clientes",
+            "active_conversations": "Conversaciones Activas"
+        },
+        "activity": {
+            "title": "Actividad Reciente",
+            "subtitle": "Eventos del Sistema y Agente IA",
+            "empty": "No hay actividad reciente.",
+            "no_details": "Sin detalles adicionales."
+        },
+        "recent_orders": {
+            "title": "Ventas Recientes",
+            "empty": "No hay pedidos recientes.",
+            "order_prefix": "Pedido #"
+        }
+    },
+    "clients": {
+        "title": "Gestión de Clientes",
+        "subtitle": "Ver y gestionar todas las interacciones e historial de clientes.",
+        "search_placeholder": "Buscar por nombre o teléfono...",
+        "table": {
+            "name": "Nombre",
+            "phone": "Teléfono",
+            "conversations": "Conversaciones",
+            "joined": "Unido",
+            "status": "Estado",
+            "actions": "Acciones",
+            "id": "ID"
+        },
+        "loading": "Cargando clientes...",
+        "empty_search": "No se encontraron clientes con esa búsqueda.",
+        "empty_all": "No hay clientes. Espera mensajes entrantes.",
+        "active": "Activo",
+        "action_hub": "Acciones",
+        "actions": {
+            "send_message": "Enviar Mensaje",
+            "past_orders": "Pedidos Anteriores",
+            "view_profile": "Ver Perfil",
+            "confirm_delete": "¿Estás seguro de eliminar al cliente",
+            "delete_client": "Eliminar Cliente"
+        }
+    },
+    "product": {
+        "create": "Crear Producto",
+        "name": "Nombre",
+        "price": "Precio",
+        "stock": "Stock",
+        "status": "Estado",
+        "id": "ID",
+        "active": "Activo",
+        "inactive": "Inactivo",
+        "syncing": "Sincronizando Catálogo...",
+        "no_products": "No hay productos. Agrega uno para comenzar."
+    },
+    "orders": {
+        "create": "Crear Pedido Manual",
+        "ref": "Ref",
+        "client": "Cliente",
+        "products": "Productos",
+        "total": "Total",
+        "status": "Estado",
+        "actions": "Acciones",
+        "generate_link": "Generar Link",
+        "syncing": "Sincronizando Pedidos...",
+        "filter": {
+            "all": "Todos",
+            "pending": "Pendiente",
+            "paid": "Pagado",
+            "failed": "Fallido"
+        },
+        "modal": {
+            "title": "Crear Pedido Manual",
+            "select_client": "1. Seleccionar Cliente",
+            "choose_client": "Elegir Cliente...",
+            "add_products": "2. Agregar Productos",
+            "summary": "Resumen del Pedido",
+            "no_items": "Ningún artículo seleccionado",
+            "net_total": "Total Neto",
+            "place_order": "Realizar Pedido",
+            "error_select": "Selecciona un cliente y al menos un producto.",
+            "error_create": "Error al crear pedido"
+        },
+        "more_items": "+{{count}} más"
+    },
     "common": {
         "save": "Guardar",
         "saved": "¡Guardado!",
@@ -26,7 +138,18 @@
         "no": "No",
         "selected": "Seleccionado",
         "authenticated_as": "Autenticado como",
-        "logout": "Cerrar Sesión"
+        "logout": "Cerrar Sesión",
+        "new": "Nuevas",
+        "time_ago": "hace {{time}}",
+        "take_action": "Tomar Acción",
+        "synchronizing": "Sincronizando...",
+        "all_caught_up": "¡Todo al día!",
+        "view_all_logs": "Ver todo el registro de actividad",
+        "search_placeholder": "Buscar clientes, pedidos...",
+        "no_results": "No se encontraron resultados para",
+        "admin_role": "Administrador",
+        "integrations": "Integraciones",
+        "settings": "Configuración"
     },
     "auth": {
         "title": "Control de Acceso",
@@ -40,14 +163,6 @@
         "error_failed": "Autenticación Fallida",
         "error_unreachable": "Servidor inalcanzable. Asegúrese de que el backend esté funcionando.",
         "role_access": "Acceso {{role}}"
-    },
-    "sidebar": {
-        "inbox": "Bandeja de Entrada",
-        "archived_view": "VISTA DE ARCHIVADOS",
-        "search_placeholder": "Buscar chats...",
-        "no_conversations": "No se encontraron conversaciones {{status}}.",
-        "ai_config": "Config. IA",
-        "new_message": "Nuevo Mensaje"
     },
     "new_chat_modal": {
         "title": "Nueva Conversación",
@@ -87,20 +202,24 @@
             "commercial_domain": "Dominio Comercial",
             "auto_approved": "Aprobado Auto",
             "blocked_violation": "Bloqueos de Política",
-            "intent_analytics": "Analítica de Intenciones"
+            "intent_analytics": "Analítica de Intenciones",
+            "system_desc": "Administre claves API, snapshots y vea registros de auditoría."
         },
         "tabs": {
             "context": "Identidad",
             "branding": "Branding",
-            "behavior": "Comportamiento",
-            "advanced": "Inteligencia",
-            "datasets": "Datasets",
-            "sandbox": "Sandbox",
+            "behavior": "Comportamiento Base",
+            "advanced": "Lógica Avanzada",
+            "knowledge": "Base de Conocimiento",
+            "sandbox": "Sandbox IA",
             "secrets": "Secretos",
             "audit": "Auditoría",
             "snapshots": "Historial",
             "license": "Licencia",
             "analytics": "Analítica"
+        },
+        "organization": {
+            "desc": "Administre la identidad de su negocio y su presencia visual."
         },
         "branding": {
             "title": "Branding e Identidad Visual",
@@ -139,6 +258,7 @@
         },
         "fields": {
             "business_name": "Nombre Comercial",
+            "business_description": "Descripción del Negocio",
             "description": "Descripción",
             "tone": "Tono de Voz",
             "business_tone": "Tono del Negocio",
@@ -309,6 +429,7 @@
             "title": "Gestión de Licencia",
             "subtitle": "Gestione su licencia de producto y derechos del plan.",
             "status": "Estado de la Licencia",
+            "loading": "Cargando...",
             "active": "Activa",
             "missing": "Faltante",
             "invalid": "Inválida",

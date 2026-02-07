@@ -30,20 +30,20 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
     const ws = getWorkspace();
 
     const colors = [
-        { name: t('admin.branding.colors.blue'), value: "#2563eb" },
-        { name: t('admin.branding.colors.green'), value: "#10b981" },
-        { name: t('admin.branding.colors.navy'), value: "#1e3a8a" },
-        { name: t('admin.branding.colors.gold'), value: "#d4af37" },
-        { name: t('admin.branding.colors.purple'), value: "#7c3aed" },
-        { name: t('admin.branding.colors.orange'), value: "#f59e0b" },
+        { name: t('admin.branding.colors.blue') || "SaaS Blue", value: "#2563eb" },
+        { name: t('admin.branding.colors.green') || "Medical Green", value: "#10b981" },
+        { name: t('admin.branding.colors.navy') || "Professional Navy", value: "#1e3a8a" },
+        { name: t('admin.branding.colors.gold') || "Luxury Gold", value: "#d4af37" },
+        { name: t('admin.branding.colors.purple') || "Cyber Purple", value: "#7c3aed" },
+        { name: t('admin.branding.colors.orange') || "Energy Orange", value: "#f59e0b" },
     ];
 
     const bgColors = [
-        { name: t('admin.branding.bg_colors.slate'), value: "#030712" },
-        { name: t('admin.branding.bg_colors.midnight'), value: "#020617" },
-        { name: t('admin.branding.bg_colors.ocean'), value: "#080c1d" },
-        { name: t('admin.branding.bg_colors.forest'), value: "#06130b" },
-        { name: t('admin.branding.bg_colors.pure'), value: "#000000" },
+        { name: t('admin.branding.bg_colors.slate') || "Slate", value: "#030712" },
+        { name: t('admin.branding.bg_colors.midnight') || "Midnight", value: "#020617" },
+        { name: t('admin.branding.bg_colors.ocean') || "Ocean", value: "#080c1d" },
+        { name: t('admin.branding.bg_colors.forest') || "Forest", value: "#06130b" },
+        { name: t('admin.branding.bg_colors.pure') || "Pure Black", value: "#000000" },
     ];
 
     return (
@@ -52,9 +52,9 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
                 <div className="flex justify-between items-center mb-8">
                     <div>
                         <h2 className="text-xl font-bold dark:text-white flex items-center gap-3">
-                            <Palette className="w-6 h-6 text-brand-primary" style={{ color: 'var(--brand-primary)' }} /> {t('admin.branding.title')}
+                            <Palette className="w-6 h-6 text-brand-primary" style={{ color: 'var(--brand-primary)' }} /> {t('admin.branding.title') || "Branding & Visual Identity"}
                         </h2>
-                        <p className="text-sm text-gray-500">{t('admin.branding.desc')}</p>
+                        <p className="text-sm text-gray-500">{t('admin.branding.desc') || "Configure the global aesthetics of your platform and browser tab behavior."}</p>
                     </div>
                 </div>
 
@@ -62,7 +62,7 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
                     {/* Primary Color */}
                     <div className="space-y-6">
                         <label className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                            {t('admin.branding.primary_color')}
+                            {t('admin.branding.primary_color') || "Primary Color"}
                         </label>
                         <div className="grid grid-cols-3 gap-2">
                             {colors.map((c) => (
@@ -70,8 +70,8 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
                                     key={c.value}
                                     onClick={() => setConfig({ ...config, primary_color: c.value })}
                                     aria-label={`Select ${c.name} as primary color`}
-                                    className={`relative h-12 rounded-xl transition-all hover:scale-105 flex items-center justify-center border-2 select-none hover-premium ${config.primary_color === c.value ? "border-white shadow-lg ring-2" : "border-transparent"}`}
-                                    style={{ backgroundColor: c.value, outlineColor: config.primary_color === c.value ? c.value : undefined }}
+                                    className={`relative h-12 rounded-xl transition-all hover:translate-y-[-2px] flex items-center justify-center border-2 select-none ${config.primary_color === c.value ? "border-white shadow-lg ring-2 ring-brand-primary" : "border-transparent hover:border-white/20"}`}
+                                    style={{ backgroundColor: c.value }}
                                 >
                                     {config.primary_color === c.value && <CheckCircle className="text-white w-4 h-4 shadow-sm" />}
                                 </button>
@@ -85,7 +85,7 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
                                     onChange={(e) => setConfig({ ...config, primary_color: e.target.value })}
                                     className="absolute inset-0 opacity-0 cursor-pointer"
                                 />
-                                <span className="text-[9px] font-bold text-gray-400 group-hover:text-brand-primary" style={{ color: config.primary_color === config.primary_color ? undefined : 'var(--brand-primary)' }}>{t('admin.branding.custom')}</span>
+                                <span className="text-[9px] font-bold text-gray-400 group-hover:text-brand-primary" style={{ color: config.primary_color === config.primary_color ? undefined : 'var(--brand-primary)' }}>{t('admin.branding.custom') || "CUSTOM"}</span>
                             </div>
                         </div>
                     </div>
@@ -93,7 +93,7 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
                     {/* Secondary Color */}
                     <div className="space-y-6">
                         <label className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                            {t('admin.branding.secondary_color')}
+                            {t('admin.branding.secondary_color') || "Secondary Color"}
                         </label>
                         <div className="grid grid-cols-3 gap-2">
                             {colors.map((c) => (
@@ -116,7 +116,7 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
                                     onChange={(e) => updateWorkspace('secondary_color', e.target.value)}
                                     className="absolute inset-0 opacity-0 cursor-pointer"
                                 />
-                                <span className="text-[9px] font-bold text-gray-400 group-hover:text-brand-secondary" style={{ color: 'var(--brand-secondary)' }}>{t('admin.branding.custom')}</span>
+                                <span className="text-[9px] font-bold text-gray-400 group-hover:text-brand-secondary" style={{ color: 'var(--brand-secondary)' }}>{t('admin.branding.custom') || "CUSTOM"}</span>
                             </div>
                         </div>
                     </div>
@@ -124,7 +124,7 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
                     {/* Dark Mode Background Color */}
                     <div className="space-y-6">
                         <label className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                            {t('admin.branding.bg_color_dark')}
+                            {t('admin.branding.bg_color_dark') || "Background Color (Dark)"}
                         </label>
                         <div className="grid grid-cols-3 gap-2">
                             {bgColors.map((c) => (
@@ -147,7 +147,7 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
                                     onChange={(e) => updateWorkspace('bg_color', e.target.value)}
                                     className="absolute inset-0 opacity-0 cursor-pointer"
                                 />
-                                <span className="text-[9px] font-bold text-gray-400 group-hover:text-gray-200">{t('admin.branding.custom')}</span>
+                                <span className="text-[9px] font-bold text-gray-400 group-hover:text-gray-200">{t('admin.branding.custom') || "CUSTOM"}</span>
                             </div>
                         </div>
                     </div>
@@ -158,7 +158,7 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
                             <label className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 select-none">
-                                <Layout className="w-4 h-4" /> {t('admin.branding.border_radius')}
+                                <Layout className="w-4 h-4" /> {t('admin.branding.border_radius') || "Interface Roundness"}
                             </label>
                             <span className="text-xs font-bold dark:text-gray-400 tabular-nums">{ws.border_radius ?? 12}px</span>
                         </div>
@@ -171,21 +171,21 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
                             style={{ accentColor: 'var(--brand-primary)' }}
                         />
                         <div className="flex justify-between text-[10px] text-gray-500 uppercase font-black tracking-tighter">
-                            <span>{t('admin.branding.roundness_sharp')}</span>
-                            <span>{t('admin.branding.roundness_standard')}</span>
-                            <span>{t('admin.branding.roundness_rounded')}</span>
+                            <span>{t('admin.branding.roundness_sharp') || "Sharp"}</span>
+                            <span>{t('admin.branding.roundness_standard') || "Standard"}</span>
+                            <span>{t('admin.branding.roundness_rounded') || "Rounded"}</span>
                         </div>
                     </div>
 
                     {/* UI Density */}
                     <div className="space-y-6">
                         <label className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                            <Layout className="w-4 h-4" /> {t('admin.branding.ui_density')}
+                            <Layout className="w-4 h-4" /> {t('admin.branding.ui_density') || "Interface Density"}
                         </label>
                         <div className="flex gap-4">
                             {[
-                                { id: "comfortable", label: t('admin.branding.density_comfortable') },
-                                { id: "compact", label: t('admin.branding.density_compact') }
+                                { id: "comfortable", label: t('admin.branding.density_comfortable') || "Comfortable" },
+                                { id: "compact", label: t('admin.branding.density_compact') || "Compact" }
                             ].map((opt) => (
                                 <button
                                     key={opt.id}
@@ -201,13 +201,13 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
                                 </button>
                             ))}
                         </div>
-                        <p className="text-[10px] text-gray-500 italic">{t('admin.branding.density_hint')}</p>
+                        <p className="text-[10px] text-gray-500 italic">{t('admin.branding.density_hint') || "Compact view increases visibility of items by 20%."}</p>
                     </div>
                 </div>
 
                 <div className="mt-8 pt-8 border-t dark:border-gray-800">
                     <label className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 mb-4">
-                        <ImageIcon className="w-4 h-4" /> {t('admin.branding.logo_favicon_url')}
+                        <ImageIcon className="w-4 h-4" /> {t('admin.branding.logo_favicon_url') || "Logo & Favicon URL"}
                     </label>
                     <div className="flex gap-4 items-center">
                         <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden flex-shrink-0 border dark:border-gray-700 shadow-inner" style={{ borderRadius: 'calc(var(--brand-radius) / 2)' }}>
@@ -219,7 +219,7 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
                                 type="text"
                                 value={config.logo_url || ""}
                                 onChange={(e) => setConfig({ ...config, logo_url: e.target.value })}
-                                placeholder={t('admin.branding.logo_placeholder')}
+                                placeholder="https://example.com/logo.png"
                                 spellCheck={false}
                                 autoComplete="off"
                                 className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border-none text-base focus:ring-2 focus:ring-blue-500 dark:text-white outline-none shadow-inner"
@@ -246,15 +246,15 @@ export const BrandingTab = ({ config, setConfig }: Props) => {
                             {config.logo_url ? <img src={config.logo_url} className="max-h-full object-contain" /> : <Shield className="w-6 h-6" style={{ color: config.primary_color }} />}
                         </div>
                         <div>
-                            <h4 className="text-xl font-black dark:text-white uppercase tracking-tighter" style={{ color: config.primary_color }}>{config.business_name || t('admin.fields.business_name')}</h4>
+                            <h4 className="text-xl font-black dark:text-white uppercase tracking-tighter" style={{ color: config.primary_color }}>{config.business_name || "Business Name"}</h4>
                             <div className="flex items-center gap-2 mt-1">
                                 <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: ws.secondary_color || config.primary_color }}></span>
-                                <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">{t('admin.branding.live_engine')}</span>
+                                <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">{t('admin.branding.live_engine') || "LIVE ENGINE ACTIVE"}</span>
                             </div>
                         </div>
                     </div>
                     <div className="px-4 py-2 rounded-full text-[10px] font-black uppercase text-white shadow-lg" style={{ backgroundColor: config.primary_color, borderRadius: `${(ws.border_radius ?? 12) * 2}px` }}>
-                        {t('admin.branding.preview_active')}
+                        {t('admin.branding.preview_active') || "PREVIEW ACTIVE"}
                     </div>
                 </div>
 

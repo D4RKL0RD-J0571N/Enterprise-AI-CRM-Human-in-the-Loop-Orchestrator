@@ -20,7 +20,7 @@ export const SnapshotsTab = ({
     onRename,
     onToggleLock
 }: Props) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editName, setEditName] = useState("");
 
@@ -93,7 +93,7 @@ export const SnapshotsTab = ({
                                         </p>
                                     )}
                                     <p className="text-[10px] text-gray-500 uppercase tracking-widest font-mono mt-1">
-                                        {new Date(ss.created_at).toLocaleString('es-CR')}
+                                        {new Date(ss.created_at).toLocaleString(i18n.language)}
                                     </p>
                                 </div>
                             </div>
@@ -102,7 +102,7 @@ export const SnapshotsTab = ({
                                 {onRename && (
                                     <button
                                         onClick={() => startEdit(ss)}
-                                        className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-xl transition-colors opacity-0 group-hover:opacity-100"
+                                        className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-xl transition-all opacity-40 hover:opacity-100"
                                         title={t('admin.snapshots.rename_title')}
                                     >
                                         <Edit2 className="w-4 h-4 text-blue-600" />
@@ -112,7 +112,7 @@ export const SnapshotsTab = ({
                                 {onToggleLock && (
                                     <button
                                         onClick={() => onToggleLock(ss.id)}
-                                        className="p-2 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-xl transition-colors"
+                                        className="p-2 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-xl transition-all opacity-40 hover:opacity-100"
                                         title={ss.is_locked ? t('admin.snapshots.unlock_title') : t('admin.snapshots.lock_title')}
                                     >
                                         {ss.is_locked ? (
@@ -135,7 +135,7 @@ export const SnapshotsTab = ({
                                 {onDelete && !ss.is_locked && (
                                     <button
                                         onClick={() => onDelete(ss.id)}
-                                        className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-xl transition-colors opacity-0 group-hover:opacity-100"
+                                        className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-xl transition-all opacity-40 hover:opacity-100"
                                         title={t('admin.snapshots.delete_title')}
                                     >
                                         <Trash2 className="w-4 h-4 text-red-600" />

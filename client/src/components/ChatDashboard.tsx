@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Sun, Moon, Grid2X2, LayoutGrid, Monitor, Layout as LayoutIcon } from "lucide-react";
+import { Grid2X2, LayoutGrid, Monitor, Layout as LayoutIcon, MessageSquare, Mail, Instagram, MessageCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { useBrandingContext } from "../context/BrandingContext";
@@ -32,7 +32,7 @@ interface ChatSession {
 
 export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
     const { t } = useTranslation();
-    const { token, isAdmin, logout, user } = useAuth();
+    const { token, isAdmin } = useAuth();
     const [sessions, setSessions] = useState<ChatSession[]>([]);
 
     const [conversations, setConversations] = useState<any[]>([]);
@@ -43,7 +43,7 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
     const activeClientName = activeSession?.clientName || t('chat.select_client');
     const activeClientPhone = activeSession?.clientPhone || "";
 
-    const { config, isDarkMode, toggleDarkMode } = useBrandingContext();
+    const { config } = useBrandingContext();
 
 
 
@@ -64,6 +64,7 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
     const [isNewChatOpen, setIsNewChatOpen] = useState(false);
     const [newChatPhone, setNewChatPhone] = useState("");
     const [newChatName, setNewChatName] = useState("");
+    const [newChatChannel, setNewChatChannel] = useState<'whatsapp' | 'email' | 'instagram' | 'messenger'>('whatsapp');
 
     const sessionsRef = useRef(sessions);
     useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
@@ -139,19 +140,19 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
         connectWS();
     }, [retryCount]);
 
-    // PERSISTENCE: Save Workspace Config to LocalStorage
+    // PERSISTENCE: Debounced Workspace Config & Sync
     useEffect(() => {
         const workspaceData = {
             sessions,
             layoutMode,
             activeConversationId
         };
-        localStorage.setItem("workspace_layout", JSON.stringify(workspaceData));
-    }, [sessions, layoutMode, activeConversationId]);
 
-    // PERSISTENCE: Periodic Server Sync
-    useEffect(() => {
-        const saveConfig = setTimeout(async () => {
+        const saveTimer = setTimeout(async () => {
+            // Local Storage Persistence
+            localStorage.setItem("workspace_layout", JSON.stringify(workspaceData));
+
+            // Server-side Sync
             const workspaceConfig = {
                 open_conversations: sessions.map(s => s.conversationId),
                 layout_mode: layoutMode,
@@ -159,7 +160,7 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
             };
 
             try {
-                await fetch("http://localhost:8000/admin/workspace", {
+                await fetch(API_ENDPOINTS.admin.workspace, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -168,17 +169,18 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
                     body: JSON.stringify({ config: JSON.stringify(workspaceConfig) })
                 });
             } catch (e) {
-                console.error("Failed to save workspace", e);
+                console.error("Failed to sync workspace to server", e);
             }
-        }, 2000);
-        return () => clearTimeout(saveConfig);
+        }, 1500);
+
+        return () => clearTimeout(saveTimer);
     }, [sessions, layoutMode, activeConversationId, token]);
 
     // RESTORE: Load Workspace Config & Sessions
     useEffect(() => {
         const syncList = async () => {
             try {
-                const res = await fetch("http://localhost:8000/conversations/", {
+                const res = await fetch(API_ENDPOINTS.conversations.base, {
                     headers: { "Authorization": `Bearer ${token}` }
                 });
                 if (res.ok) {
@@ -196,7 +198,7 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
 
     const fetchMessages = async (convId: number) => {
         try {
-            const res = await fetch(`http://localhost:8000/conversations/${convId}/messages`, {
+            const res = await fetch(API_ENDPOINTS.conversations.messages(convId), {
                 headers: { "Authorization": `Bearer ${token}` }
             });
             if (res.ok) {
@@ -230,7 +232,7 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
             return;
         }
         try {
-            const res = await fetch(`http://localhost:8000/conversations/${convId}/toggle-auto-ai`, {
+            const res = await fetch(API_ENDPOINTS.conversations.action(convId, "toggle-auto-ai"), {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${token}` }
             });
@@ -361,6 +363,7 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
     const handleCreateNewChat = () => {
         setNewChatPhone("");
         setNewChatName("");
+        setNewChatChannel("whatsapp");
         setIsNewChatOpen(true);
     };
 
@@ -370,7 +373,11 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
             const res = await fetch(`${API_ENDPOINTS.conversations.base}initiate`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ phone_number: newChatPhone, name: newChatName || undefined })
+                body: JSON.stringify({
+                    phone_number: newChatPhone,
+                    name: newChatName || undefined,
+                    channel: newChatChannel
+                })
             });
             if (res.ok) {
                 const data = await res.json();
@@ -436,7 +443,7 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
     };
 
     return (
-        <div className="flex h-screen w-full bg-slate-50 dark:bg-[var(--brand-bg)] transition-colors duration-300 overflow-hidden font-sans">
+        <div className="flex h-full w-full bg-slate-50 dark:bg-[var(--brand-bg)] transition-colors duration-300 overflow-hidden font-sans">
             <Sidebar
                 onSelect={handleSelectConversation}
                 activeConversationId={activeConversationId}
@@ -446,82 +453,45 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
             />
 
             <div className="flex-1 flex flex-col relative w-full h-full overflow-hidden">
-                {/* MODERN HEADER SECTION */}
-                <div className="flex items-center justify-between p-4 border-b dark:border-[var(--brand-border)] bg-white/50 dark:bg-[var(--brand-surface)]/50 backdrop-blur-md z-[70]">
-                    <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-3">
-                            {config.logo_url && <img src={config.logo_url} alt="Logo" className="w-6 h-6 object-contain" />}
-                            <span className="text-sm font-black dark:text-white uppercase tracking-tighter" style={{ color: 'var(--brand-primary)' }}>{config.business_name || "Console"}</span>
-                        </div>
-
-                        <div className="h-4 w-px bg-[var(--brand-border)]"></div>
+                {/* TOOLBAR SECTION - Simplified for Dashboard */}
+                <div className="flex items-center justify-between px-4 py-2 border-b dark:border-[var(--brand-border)] bg-white/50 dark:bg-[var(--brand-surface)]/50 backdrop-blur-md z-[70]">
+                    <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full animate-pulse ${isPollingMode ? 'bg-amber-500' : token ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-red-500'}`}></div>
-                            <span className="text-[10px] font-black uppercase text-slate-400 dark:text-gray-500 tracking-widest leading-none">
+                            <div className={`w-2 h-2 rounded-full animate-pulse ${isPollingMode ? 'bg-amber-500' : token ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+                            <span className="text-[10px] font-bold uppercase text-slate-500">
                                 {isPollingMode ? t('chat.status.polling') : token ? t('chat.status.online') : t('chat.status.offline')}
                             </span>
                         </div>
 
-                        <div className="h-4 w-px bg-[var(--brand-border)]"></div>
-                        <div className="flex items-center gap-3">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase">{t('chat.node_registry')}</span>
-                            <div className="px-2 py-0.5 bg-[var(--brand-surface)] rounded border dark:border-[var(--brand-border)] flex items-center gap-1.5">
-                                <span className={`w-1.5 h-1.5 rounded-full ${isAdmin ? 'bg-indigo-500' : 'bg-amber-500'}`}></span>
-                                <span className="text-[9px] font-black dark:text-slate-300 uppercase tracking-tighter">
-                                    {isAdmin ? t('chat.privileged_node') : t('chat.operational_access')}
-                                </span>
-                            </div>
+                        <div className="h-4 w-px bg-slate-200 dark:bg-slate-700"></div>
+
+                        <div className="flex items-center gap-2 px-2 py-1 bg-slate-100 dark:bg-[var(--brand-surface)] rounded text-[10px] font-bold text-slate-500">
+                            {isAdmin ? t('chat.privileged_node') : t('chat.operational_access')}
                         </div>
-                        <div className="flex gap-2 p-1 bg-[var(--brand-bg)] rounded-2xl border dark:border-[var(--brand-border)] ml-4">
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <div className="flex gap-1 p-1 bg-slate-100 dark:bg-[var(--brand-bg)] rounded-lg border dark:border-[var(--brand-border)]">
                             <button
                                 onClick={() => setLayoutMode("focus")}
-                                className={`p-2 rounded-xl transition-all ${layoutMode === "focus" ? "bg-white dark:bg-[var(--brand-surface)] shadow-md text-[var(--brand-primary)] scale-105" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"}`}
+                                className={`p-1.5 rounded-md transition-all ${layoutMode === "focus" ? "bg-white dark:bg-[var(--brand-surface)] shadow-sm text-[var(--brand-primary)]" : "text-slate-400 hover:text-slate-600"}`}
                                 title="Focus Mode"
                             >
                                 <Monitor className="w-4 h-4" />
                             </button>
                             <button
                                 onClick={() => setLayoutMode("canvas")}
-                                className={`p-2 rounded-xl transition-all ${layoutMode === "canvas" ? "bg-white dark:bg-[var(--brand-surface)] shadow-md text-[var(--brand-primary)] scale-105" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"}`}
+                                className={`p-1.5 rounded-md transition-all ${layoutMode === "canvas" ? "bg-white dark:bg-[var(--brand-surface)] shadow-sm text-[var(--brand-primary)]" : "text-slate-400 hover:text-slate-600"}`}
                                 title="Whiteboard Canvas"
                             >
                                 <LayoutGrid className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
-
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-3 px-3 py-1.5 bg-[var(--brand-surface)] rounded-2xl border dark:border-[var(--brand-border)] shadow-sm">
-                            <div
-                                className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black text-white uppercase ring-2 ring-[var(--brand-primary)]/20"
-                                style={{ backgroundColor: "var(--brand-primary)" }}
-                            >
-                                {user?.username.substring(0, 2)}
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="text-[11px] font-black dark:text-white leading-none uppercase">{user?.username}</span>
-                                <span className="text-[8px] font-bold text-slate-500 uppercase tracking-[0.2em] mt-1">{t('auth.role_access', { role: user?.role })}</span>
-                            </div>
-                            <button
-                                onClick={logout}
-                                className="ml-2 p-2 hover:bg-red-500/10 rounded-xl text-slate-400 hover:text-red-500 transition-all active:scale-90"
-                                title={t('chat.terminate_session')}
-                            >
-                                <LayoutIcon className="w-4 h-4 rotate-90" />
-                            </button>
-                        </div>
-
-                        <button
-                            onClick={toggleDarkMode}
-                            className="p-2.5 bg-[var(--brand-surface)] rounded-2xl border dark:border-[var(--brand-border)] text-slate-500 dark:text-slate-400 hover:scale-105 transition-transform"
-                        >
-                            {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-[var(--brand-secondary)]" />}
-                        </button>
-                    </div>
                 </div>
 
                 <div
-                    className={`flex-1 overflow-auto relative bg-slate-50 dark:bg-[var(--brand-surface)]/40 infinite-canvas ${isDragging || (isPanning && layoutMode === 'canvas') ? 'cursor-grabbing' : (layoutMode === 'canvas' ? 'cursor-grab' : '')}`}
+                    className={`flex-1 overflow-auto relative bg-slate-50 dark:bg-[var(--brand-surface)]/10 infinite-canvas ${isDragging || (isPanning && layoutMode === 'canvas') ? 'cursor-grabbing' : (layoutMode === 'canvas' ? 'cursor-grab' : '')}`}
                     ref={canvasRef}
                     onMouseDown={handleCanvasMouseDown}
                 >
@@ -624,24 +594,49 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
                 <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.target === e.currentTarget && setIsNewChatOpen(false)}>
                     <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border dark:border-gray-800 ring-1 ring-white/10">
                         <div className="p-8">
-                            <h2 className="text-2xl font-black dark:text-white mb-2 tracking-tight">{t('new_chat_modal.title')}</h2>
-                            <p className="text-sm text-gray-500 mb-8 font-medium">{t('new_chat_modal.description')}</p>
+                            <h2 className="text-2xl font-black dark:text-white mb-2 tracking-tight">{t('chat.new_chat_modal.title')}</h2>
+                            <p className="text-sm text-gray-500 mb-8 font-medium">{t('chat.new_chat_modal.description')}</p>
 
                             <div className="space-y-6">
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{t('new_chat_modal.phone_label')}</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">{t('chat.new_chat_modal.target_channel')}</label>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {[
+                                            { id: 'whatsapp', icon: MessageSquare, label: 'WA' },
+                                            { id: 'email', icon: Mail, label: 'Mail' },
+                                            { id: 'instagram', icon: Instagram, label: 'IG' },
+                                            { id: 'messenger', icon: MessageCircle, label: 'FB' }
+                                        ].map((ch) => (
+                                            <button
+                                                key={ch.id}
+                                                onClick={() => setNewChatChannel(ch.id as any)}
+                                                className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${newChatChannel === ch.id
+                                                    ? "bg-indigo-50 border-indigo-500 text-indigo-600 dark:bg-indigo-900/30"
+                                                    : "bg-gray-50 dark:bg-gray-950 border-transparent text-gray-400 hover:border-gray-200"}`}
+                                            >
+                                                <ch.icon className="w-5 h-5 mb-1" />
+                                                <span className="text-[10px] font-bold uppercase">{ch.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">
+                                        {newChatChannel === 'email' ? t('chat.new_chat_modal.email_label') : t('chat.new_chat_modal.phone_label')}
+                                    </label>
                                     <input
                                         type="text"
                                         value={newChatPhone}
                                         onChange={(e) => setNewChatPhone(e.target.value)}
                                         className="w-full p-4 bg-gray-50 dark:bg-gray-950 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:outline-none font-mono text-lg dark:text-white transition-all shadow-inner"
-                                        placeholder="+1234567890"
+                                        placeholder={newChatChannel === 'email' ? "user@example.com" : "+1234567890"}
                                         autoFocus
                                         onKeyDown={(e) => e.key === 'Enter' && submitNewChat()}
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{t('new_chat_modal.name_label')}</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{t('chat.new_chat_modal.name_label')}</label>
                                     <input
                                         type="text"
                                         value={newChatName}
@@ -658,14 +653,14 @@ export default function ChatDashboard({ onNavigate }: ChatDashboardProps) {
                                 onClick={() => setIsNewChatOpen(false)}
                                 className="px-6 py-3 text-sm font-bold text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-2xl transition-colors"
                             >
-                                {t('new_chat_modal.cancel')}
+                                {t('chat.new_chat_modal.cancel')}
                             </button>
                             <button
                                 onClick={submitNewChat}
                                 disabled={!newChatPhone.trim()}
                                 className="px-8 py-3 text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 active:scale-95 transform"
                             >
-                                {t('new_chat_modal.start')}
+                                {t('chat.new_chat_modal.start')}
                             </button>
                         </div>
                     </div>

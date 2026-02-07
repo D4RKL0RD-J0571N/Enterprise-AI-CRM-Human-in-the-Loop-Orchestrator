@@ -1,7 +1,7 @@
-import { useTranslation } from "react-i18next";
 import { Sliders, X, Plus, AlertTriangle } from "lucide-react";
 import type { AIConfig } from "../../../types/admin";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface Props {
     config: AIConfig;
@@ -13,12 +13,16 @@ export const BehaviorTab = ({ config, setConfig }: Props) => {
     const [newRule, setNewRule] = useState("");
     const [newTopic, setNewTopic] = useState("");
 
+    const SUGGESTED_TOPICS = [
+        "Politics", "Adult Content", "Financial Advice", "Medical Diagnoses", "Competitor Pricing", "Passwords/Credentials"
+    ];
+
     return (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
             {/* Rules Section */}
             <div className="bg-white dark:bg-gray-900 p-8 rounded-3xl border dark:border-gray-800 shadow-sm space-y-6 flex flex-col h-fit">
                 <h2 className="text-lg font-bold dark:text-white border-b dark:border-gray-800 pb-3 flex items-center gap-2">
-                    <Sliders className="w-5 h-5 text-blue-500" /> {t('admin.sections.operational_rules')}
+                    <Sliders className="w-5 h-5 text-blue-500" /> {t('admin.sections.operational_rules') || "Operational Rules"}
                 </h2>
                 <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                     {(config.rules || []).map((rule, i) => (
@@ -38,8 +42,9 @@ export const BehaviorTab = ({ config, setConfig }: Props) => {
                         type="text"
                         value={newRule}
                         onChange={(e) => setNewRule(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && newRule && (setConfig({ ...config, rules: [...(config.rules || []), newRule] }), setNewRule(""))}
                         className="flex-1 bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 dark:text-white text-sm"
-                        placeholder={t('admin.fields.operational_rules_placeholder')}
+                        placeholder={t('admin.fields.operational_rules_placeholder') || "e.g. Always ask for order number..."}
                     />
                     <button
                         onClick={() => { if (newRule) { setConfig({ ...config, rules: [...(config.rules || []), newRule] }); setNewRule(""); } }}
@@ -54,12 +59,12 @@ export const BehaviorTab = ({ config, setConfig }: Props) => {
             <div className="space-y-8 h-fit">
                 <div className="bg-white dark:bg-gray-900 p-8 rounded-3xl border dark:border-gray-800 shadow-sm space-y-8">
                     <h2 className="text-lg font-bold dark:text-white border-b dark:border-gray-800 pb-3 flex items-center gap-2">
-                        <Sliders className="w-5 h-5 text-indigo-500" /> {t('admin.sections.thresholds')}
+                        <Sliders className="w-5 h-5 text-indigo-500" /> {t('admin.sections.thresholds') || "Confidence Thresholds"}
                     </h2>
                     <div className="space-y-10">
                         <div className="space-y-4">
                             <div className="flex justify-between items-center">
-                                <label className="text-sm font-bold dark:text-gray-300">{t('admin.fields.auto_respond')}</label>
+                                <label className="text-sm font-bold dark:text-gray-300">{t('admin.fields.auto_respond') || "Auto-Response Threshold (%)"}</label>
                                 <span className="text-indigo-600 dark:text-indigo-400 font-black text-xl">{config.auto_respond_threshold}%</span>
                             </div>
                             <input
@@ -67,15 +72,15 @@ export const BehaviorTab = ({ config, setConfig }: Props) => {
                                 min="0" max="100"
                                 value={config.auto_respond_threshold}
                                 onChange={(e) => setConfig({ ...config, auto_respond_threshold: parseInt(e.target.value) })}
-                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                                style={{ accentColor: 'var(--brand-primary)' }}
                             />
-                            <p className="text-[10px] text-gray-500 leading-relaxed uppercase tracking-widest leading-4">{t('admin.fields.auto_respond_help')}</p>
-                            <p className="text-[10px] text-indigo-500 font-bold italic">{t('admin.fields.auto_respond_hint')}</p>
+                            <p className="text-[10px] text-gray-500 leading-relaxed uppercase tracking-widest leading-4">{t('admin.fields.auto_respond_help') || "AI will respond autonomously..."}</p>
+                            <p className="text-[10px] text-indigo-500 font-bold italic">{t('admin.fields.auto_respond_hint') || "AI will respond automatically..."}</p>
                         </div>
 
                         <div className="space-y-4">
                             <div className="flex justify-between items-center">
-                                <label className="text-sm font-bold dark:text-gray-300">{t('admin.fields.manual_review')}</label>
+                                <label className="text-sm font-bold dark:text-gray-300">{t('admin.fields.manual_review') || "Manual Review Threshold (%)"}</label>
                                 <span className="text-indigo-600 dark:text-indigo-400 font-black text-xl">{config.review_threshold}%</span>
                             </div>
                             <input
@@ -83,19 +88,19 @@ export const BehaviorTab = ({ config, setConfig }: Props) => {
                                 min="0" max="100"
                                 value={config.review_threshold}
                                 onChange={(e) => setConfig({ ...config, review_threshold: parseInt(e.target.value) })}
-                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                                style={{ accentColor: 'var(--brand-primary)' }}
                             />
-                            <p className="text-[10px] text-gray-500 leading-relaxed uppercase tracking-widest leading-4">{t('admin.fields.manual_review_help')}</p>
-                            <p className="text-[10px] text-amber-500 font-bold italic">{t('admin.fields.review_hint')}</p>
+                            <p className="text-[10px] text-gray-500 leading-relaxed uppercase tracking-widest leading-4">{t('admin.fields.manual_review_help') || "AI will require approval..."}</p>
+                            <p className="text-[10px] text-amber-500 font-bold italic">{t('admin.fields.review_hint') || "Messages with confidence below this % will require human review"}</p>
                         </div>
                     </div>
                 </div>
 
                 <div className="bg-white dark:bg-gray-900 p-8 rounded-3xl border dark:border-gray-800 shadow-sm space-y-6">
                     <h2 className="text-lg font-bold dark:text-white border-b dark:border-gray-800 pb-3 flex items-center gap-2">
-                        <AlertTriangle className="w-5 h-5 text-red-500" /> {t('admin.sections.forbidden_topics')}
+                        <AlertTriangle className="w-5 h-5 text-red-500" /> {t('admin.sections.forbidden_topics') || "Forbidden Topics"}
                     </h2>
-                    <p className="text-xs text-gray-500">{t('admin.fields.forbidden_topics_help')}</p>
+                    <p className="text-xs text-gray-500">{t('admin.fields.forbidden_topics_help') || "Topics the AI is strictly forbidden from discussing or judging."}</p>
                     <div className="flex flex-wrap gap-2">
                         {config.forbidden_topics?.map((topic, i) => (
                             <span key={i} className="px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold flex items-center gap-2 group transition-all hover:bg-red-100 border border-red-100 dark:border-red-900/30">
@@ -111,8 +116,9 @@ export const BehaviorTab = ({ config, setConfig }: Props) => {
                             type="text"
                             value={newTopic}
                             onChange={(e) => setNewTopic(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && newTopic && (setConfig({ ...config, forbidden_topics: [...(config.forbidden_topics || []), newTopic] }), setNewTopic(""))}
                             className="flex-1 bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border-none focus:ring-2 focus:ring-red-500 dark:text-white text-sm"
-                            placeholder={t('admin.fields.forbidden_topics_placeholder')}
+                            placeholder={t('admin.fields.forbidden_topics_placeholder') || "e.g. Politics, religion..."}
                         />
                         <button
                             onClick={() => { if (newTopic) { setConfig({ ...config, forbidden_topics: [...(config.forbidden_topics || []), newTopic] }); setNewTopic(""); } }}
@@ -120,6 +126,21 @@ export const BehaviorTab = ({ config, setConfig }: Props) => {
                         >
                             <Plus className="w-5 h-5" />
                         </button>
+                    </div>
+
+                    <div className="pt-4 border-t dark:border-gray-800">
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Suggested Guardrails</p>
+                        <div className="flex flex-wrap gap-2">
+                            {SUGGESTED_TOPICS.filter(t => !(config.forbidden_topics || []).includes(t)).map((topic) => (
+                                <button
+                                    key={topic}
+                                    onClick={() => setConfig({ ...config, forbidden_topics: [...(config.forbidden_topics || []), topic] })}
+                                    className="px-3 py-1.5 border border-dashed border-gray-300 dark:border-gray-700 rounded-full text-[10px] font-bold text-gray-500 hover:border-red-500 hover:text-red-500 transition-all"
+                                >
+                                    + {topic}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>

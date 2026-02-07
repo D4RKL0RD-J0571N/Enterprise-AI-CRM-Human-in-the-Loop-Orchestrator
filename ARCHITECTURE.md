@@ -85,14 +85,13 @@ On approval:
 - The `SecurityAudit` record is updated with `status="Approved"`.
 
 ### 7. Observability & Metrics Pipeline
-Every interaction emits Prometheus-compatible metrics.
-Dashboards display:
-- Latency histogram
-- Security violations per hour
-- Auto vs Manual approval ratios
-- Confidence distribution curve
-
 Logs are structured (JSON) and include timestamps and reasoning traces.
+
+### 8. CI/CD Pipeline & Automated Verification
+The system is protected by a multi-stage GitHub Actions pipeline:
+- **Unit Logic**: Backend and Frontend builds are verified on every push.
+- **Full-Stack Orchestration**: The CI environment spins up a live FastAPI backend, seeds it with `seed_config.py`, and runs Playwright E2E tests against a real (SQLite) data baseline.
+- **Resilient Verification**: Tests run with isolated workers (`--workers=1`) to ensure SQLite stability and deterministic results.
 
 ---
 
@@ -163,5 +162,6 @@ graph TD
 - **Idempotency**: Every API action carries a deterministic UUID; duplicate events ignored server-side.
 - **Backpressure**: WebSocket broadcasts maintain per-client bounded queues; slow consumers dropped gracefully.
 - **Resilience**: AI inference wrapped with timeouts; latency violations flagged in audit logs.
+- **Data Integrity**: Automated seeding (`seed_config.py`) ensures a stable system baseline for tests and first-runs.
 - **Observability**: Every subsystem emits metrics; integrated Prometheus exporter ensures transparent performance tracking.
 - **Extendability**: New LLM backends or guardrail rules can be added without core rewrites.

@@ -49,6 +49,18 @@ class AIConfigRequest(BaseModel):
     whatsapp_verify_token: Optional[str] = None
     whatsapp_phone_id: Optional[str] = None
     whatsapp_driver: str = "mock"
+    # Multi-Channel
+    email_smtp_server: Optional[str] = None
+    email_smtp_port: int = 587
+    email_user: Optional[str] = None
+    email_password: Optional[str] = None
+    email_from_name: Optional[str] = None
+    email_driver: str = "mock"
+    facebook_api_token: Optional[str] = None
+    facebook_page_id: Optional[str] = None
+    instagram_business_id: Optional[str] = None
+    meta_driver: str = "mock"
+    
     timezone: str = "UTC"
     workspace_config: str = "{}"
     suggestions_json: List[str] = []
@@ -85,8 +97,18 @@ async def get_ai_config(db: AsyncSession = Depends(get_async_db), admin: User = 
         "timezone": getattr(config, 'timezone', 'UTC'),
         "workspace_config": getattr(config, 'workspace_config', '{}'),
         "suggestions_json": json.loads(config.suggestions_json or "[]"),
-        "whatsapp_phone_id": getattr(config, 'whatsapp_phone_id', None),
-        "whatsapp_driver": getattr(config, 'whatsapp_driver', 'mock')
+        "whatsapp_driver": getattr(config, 'whatsapp_driver', 'mock'),
+        # Multi-Channel
+        "email_smtp_server": getattr(config, 'email_smtp_server', None),
+        "email_smtp_port": getattr(config, 'email_smtp_port', 587),
+        "email_user": getattr(config, 'email_user', None),
+        "email_password": decrypt_string(getattr(config, 'email_password', None)) if getattr(config, 'email_password', None) else None,
+        "email_from_name": getattr(config, 'email_from_name', None),
+        "email_driver": getattr(config, 'email_driver', 'mock'),
+        "facebook_api_token": decrypt_string(getattr(config, 'facebook_api_token', None)) if getattr(config, 'facebook_api_token', None) else None,
+        "facebook_page_id": getattr(config, 'facebook_page_id', None),
+        "instagram_business_id": getattr(config, 'instagram_business_id', None),
+        "meta_driver": getattr(config, 'meta_driver', 'mock')
     }
 
 @router.post("/config")
@@ -131,6 +153,20 @@ async def update_ai_config(req: AIConfigRequest, db: AsyncSession = Depends(get_
     config.whatsapp_phone_id = req.whatsapp_phone_id
     config.whatsapp_driver = req.whatsapp_driver
     
+    # Multi-Channel Update
+    config.email_smtp_server = req.email_smtp_server
+    config.email_smtp_port = req.email_smtp_port
+    config.email_user = req.email_user
+    if req.email_password:
+        config.email_password = encrypt_string(req.email_password)
+    config.email_from_name = req.email_from_name
+    config.email_driver = req.email_driver
+    if req.facebook_api_token:
+        config.facebook_api_token = encrypt_string(req.facebook_api_token)
+    config.facebook_page_id = req.facebook_page_id
+    config.instagram_business_id = req.instagram_business_id
+    config.meta_driver = req.meta_driver
+    
     await db.commit()
     await db.refresh(config)
     
@@ -154,7 +190,8 @@ async def update_ai_config(req: AIConfigRequest, db: AsyncSession = Depends(get_
         fallback_message=config.fallback_message,
         preferred_model=config.preferred_model,
         whatsapp_driver=config.whatsapp_driver,
-        whatsapp_phone_id=config.whatsapp_phone_id,
+        email_driver=config.email_driver,
+        meta_driver=config.meta_driver,
         logo_url=config.logo_url,
         primary_color=config.primary_color,
         version_name=f"Standard v{config.updated_at.strftime('%m%d.%H%M')}",

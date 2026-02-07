@@ -5,6 +5,7 @@
 
 // Production API URL should be set via VITE_API_URL environment variable
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+console.log('DEBUG: API BASE_URL is', BASE_URL);
 
 // Handle both standard HTTP/S and WS/WSS protocols
 export const API_BASE_URL = BASE_URL.replace(/\/$/, '');
@@ -34,6 +35,26 @@ export const API_ENDPOINTS = {
         test: `${API_BASE_URL}/admin/test`,
         models: `${API_BASE_URL}/admin/models`,
         license: `${API_BASE_URL}/admin/license`,
+        workspace: `${API_BASE_URL}/admin/workspace`,
+    },
+    clients: {
+        base: `${API_BASE_URL}/clients`,
+        action: (id: number) => `${API_BASE_URL}/clients/${id}`,
+    },
+    ecommerce: {
+        products: `${API_BASE_URL}/ecommerce/products`,
+        orders: `${API_BASE_URL}/ecommerce/orders`,
+        paymentLink: (id: number) => `${API_BASE_URL}/ecommerce/orders/${id}/payment-link`,
+    },
+    dashboard: {
+        stats: `${API_BASE_URL}/dashboard/stats`,
+        recentOrders: `${API_BASE_URL}/dashboard/recent-orders`,
+        activity: `${API_BASE_URL}/dashboard/activity`,
+    },
+    notifications: {
+        base: `${API_BASE_URL}/notifications/`,
+        readAll: `${API_BASE_URL}/notifications/read-all`,
+        markRead: (id: number) => `${API_BASE_URL}/notifications/${id}/read`,
     },
     ws: {
         chat: `${WS_BASE_URL}/ws/chat`,

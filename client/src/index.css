@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
-@variant dark (&:where(.dark, .dark *));
+@theme {
+    --variant-dark: (&:where(.dark, .dark *));
+}
 
 @layer base {
     body {
@@ -165,4 +167,18 @@
 .infinite-canvas {
     -ms-overflow-style: none;
     scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.mask-fade-right {
+    mask-image: linear-gradient(to right, black calc(100% - 40px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 40px), transparent 100%);
 }

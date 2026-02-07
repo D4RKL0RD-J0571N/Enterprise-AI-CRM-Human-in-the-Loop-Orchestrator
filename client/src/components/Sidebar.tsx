@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { PlusCircle, Archive, Pin, Settings, Search, Trash2, CheckSquare, Square, X } from "lucide-react";
+import { PlusCircle, Archive, Pin, Search, Trash2, CheckSquare, Square, X, Mail, Instagram, MessageCircle, MessageSquare, LayoutGrid } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { useBrandingContext } from "../context/BrandingContext";
@@ -21,6 +21,7 @@ interface ConversationSummary {
     is_archived: boolean;
     is_pinned: boolean;
     has_pending: boolean;
+    channel: 'whatsapp' | 'email' | 'instagram' | 'messenger';
 }
 
 interface SidebarProps {
@@ -32,13 +33,14 @@ interface SidebarProps {
     conversations?: ConversationSummary[];
 }
 
-export default function Sidebar({ onSelect, activeConversationId, onNewMessage, onPrefetch, onNavigate, conversations: externalConvs }: SidebarProps) {
+export default function Sidebar({ onSelect, activeConversationId, onNewMessage, onPrefetch, conversations: externalConvs }: SidebarProps) {
     const { t } = useTranslation();
-    const { token, isAdmin } = useAuth();
+    const { token } = useAuth();
     const { config } = useBrandingContext();
     const [conversations, setConversations] = useState<ConversationSummary[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [showArchived, setShowArchived] = useState(false);
+    const [selectedChannel, setSelectedChannel] = useState<'all' | 'whatsapp' | 'email' | 'instagram' | 'messenger'>('all');
 
     // Mass Selection State
     const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -209,6 +211,7 @@ export default function Sidebar({ onSelect, activeConversationId, onNewMessage, 
 
     const displayedConversations = conversations
         .filter(c => c.is_archived === showArchived)
+        .filter(c => selectedChannel === 'all' || c.channel === selectedChannel)
         .filter(c => c.client_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             c.client_phone.includes(searchQuery))
         .sort((a, b) => {
@@ -236,36 +239,22 @@ export default function Sidebar({ onSelect, activeConversationId, onNewMessage, 
 
     return (
         <div className="w-80 h-full border-r dark:border-[var(--brand-border)] flex flex-col bg-white dark:bg-[var(--brand-surface)] transition-colors">
-            <div className="space-y-4" style={{ padding: 'var(--density-p, 1rem)' }}>
+            <div className="flex flex-col gap-2 p-3 border-b dark:border-[var(--brand-border)]">
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        {config.logo_url ? (
-                            <img src={config.logo_url} alt="Logo" className="w-8 h-8 object-contain" style={{ borderRadius: 'calc(var(--brand-radius) / 2)' }} />
-                        ) : (
-                            <div className="w-8 h-8 flex items-center justify-center text-white font-black text-xs"
-                                style={{ backgroundColor: "var(--brand-primary)", borderRadius: 'calc(var(--brand-radius) / 2)' }}>
-                                {config.business_name?.charAt(0) || "S"}
-                            </div>
-                        )}
-                        <h1 className="text-xl font-black italic tracking-tighter dark:text-white">
-                            {config.business_name || "SupportHub"}
-                        </h1>
-                    </div>
+                    <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('sidebar.chats')}</h2>
                     <button
                         onClick={onNewMessage}
                         aria-label={t('sidebar.new_message')}
                         title={t('sidebar.new_message')}
-                        className="p-2 text-white hover:scale-110 transition-transform shadow-lg select-none hover-premium"
-                        style={{ backgroundColor: "var(--brand-primary)", boxShadow: "0 10px 15px -3px var(--brand-primary-muted)", borderRadius: 'calc(var(--brand-radius) / 2)' }}>
-                        <PlusCircle className="w-5 h-5" />
+                        className="p-1.5 text-white hover:scale-110 transition-transform shadow-md rounded-full"
+                        style={{ backgroundColor: "var(--brand-primary)" }}>
+                        <PlusCircle className="w-4 h-4" />
                     </button>
                 </div>
 
-
-
                 {/* Bulk Action Bar or Search */}
                 {isSelectionMode ? (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 p-3 border border-blue-200 dark:border-blue-800 animate-in fade-in slide-in-from-top-2" style={{ borderRadius: 'var(--brand-radius)' }}>
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-2 border border-blue-200 dark:border-blue-800 rounded-md animate-in fade-in slide-in-from-top-2">
                         <div className="flex justify-between items-center mb-2">
                             <span className="text-xs font-bold text-blue-700 dark:text-blue-300">{selectedIds.length} Selected</span>
                             <div className="flex gap-2">
@@ -317,14 +306,13 @@ export default function Sidebar({ onSelect, activeConversationId, onNewMessage, 
                         </div>
                     </div>
                 ) : (
-                    <div className="flex gap-2 p-1 bg-gray-100 dark:bg-[var(--brand-bg)]" style={{ borderRadius: 'var(--brand-radius)' }}>
+                    <div className="flex gap-2 p-1 bg-gray-100 dark:bg-[var(--brand-bg)] rounded-md">
                         <button
                             onClick={() => setShowArchived(false)}
                             aria-selected={!showArchived}
-                            className={`flex-1 py-1.5 text-[10px] font-bold transition-all relative select-none hover-premium ${!showArchived ? "bg-white dark:bg-[var(--brand-surface)] shadow-sm" : "text-gray-500"}`}
+                            className={`flex-1 py-1.5 text-[10px] font-bold transition-all relative select-none hover-premium rounded-sm ${!showArchived ? "bg-white dark:bg-[var(--brand-surface)] shadow-sm" : "text-gray-500"}`}
                             style={{
-                                color: !showArchived ? "var(--brand-primary)" : undefined,
-                                borderRadius: 'calc(var(--brand-radius) - 4px)'
+                                color: !showArchived ? "var(--brand-primary)" : undefined
                             }}
                         >
                             {t('sidebar.inbox')}
@@ -337,19 +325,17 @@ export default function Sidebar({ onSelect, activeConversationId, onNewMessage, 
                         <button
                             onClick={() => setShowArchived(true)}
                             aria-selected={showArchived}
-                            className={`flex-1 py-1.5 text-[10px] font-bold transition-all select-none hover-premium ${showArchived ? "bg-white dark:bg-[var(--brand-surface)] shadow-sm" : "text-gray-500"}`}
+                            className={`flex-1 py-1.5 text-[10px] font-bold transition-all select-none hover-premium rounded-sm ${showArchived ? "bg-white dark:bg-[var(--brand-surface)] shadow-sm" : "text-gray-500"}`}
                             style={{
-                                color: showArchived ? "var(--brand-primary)" : undefined,
-                                borderRadius: 'calc(var(--brand-radius) - 4px)'
+                                color: showArchived ? "var(--brand-primary)" : undefined
                             }}
                         >
-                            <Archive className="w-3 h-3 inline mr-1" /> {t('common.archive')}
+                            <Archive className="w-3 h-3 inline mr-1" /> {t('common.archive') || "Archive"}
                         </button>
                         <button
                             onClick={() => setIsSelectionMode(true)}
                             aria-label="Enter selection mode"
-                            className="px-3 py-1.5 text-gray-500 hover:text-[var(--brand-primary)] hover:bg-[var(--brand-surface)] transition-all select-none hover-premium"
-                            style={{ borderRadius: 'calc(var(--brand-radius) - 4px)' }}
+                            className="px-2 py-1.5 text-gray-500 hover:text-[var(--brand-primary)] hover:bg-[var(--brand-surface)] transition-all select-none hover-premium rounded-sm"
                             title="Select Multiple"
                         >
                             <CheckSquare className="w-3 h-3" />
@@ -358,18 +344,46 @@ export default function Sidebar({ onSelect, activeConversationId, onNewMessage, 
                 )}
 
                 {!isSelectionMode && (
-                    <div className="relative group">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[var(--brand-primary)] transition-colors" />
-                        <input
-                            type="text"
-                            placeholder={t('sidebar.search_placeholder')}
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            spellCheck={false}
-                            autoComplete="off"
-                            className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-[var(--brand-bg)] border-none text-sm focus:ring-2 focus:ring-[var(--brand-primary)] dark:text-white transition-all outline-none"
-                            style={{ borderRadius: 'var(--brand-radius)' }}
-                        />
+                    <div className="flex flex-col gap-3">
+                        {/* Channel Filter - Refined UI */}
+                        <div className="flex p-1 bg-gray-100 dark:bg-gray-950/50 rounded-xl border dark:border-gray-800">
+                            {[
+                                { id: 'all', icon: LayoutGrid, label: 'All' },
+                                { id: 'whatsapp', icon: MessageSquare, label: 'WA' },
+                                { id: 'email', icon: Mail, label: 'Email' },
+                                { id: 'instagram', icon: Instagram, label: 'IG' },
+                                { id: 'messenger', icon: MessageCircle, label: 'FB' }
+                            ].map((ch) => (
+                                <button
+                                    key={ch.id}
+                                    onClick={() => setSelectedChannel(ch.id as any)}
+                                    title={ch.label}
+                                    className={`flex-1 flex flex-col items-center justify-center py-3 rounded-lg transition-all duration-300 relative group ${selectedChannel === ch.id
+                                        ? "bg-white dark:bg-gray-800 shadow-md text-[var(--brand-primary)] scale-100"
+                                        : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-white/50 dark:hover:bg-white/5"
+                                        }`}
+                                >
+                                    <ch.icon className={`w-5 h-5 ${selectedChannel === ch.id ? 'scale-110' : 'group-hover:scale-110'} transition-transform`} />
+                                    <span className="text-[11px] font-black uppercase tracking-tight mt-1">{ch.label}</span>
+                                    {selectedChannel === ch.id && (
+                                        <div className="absolute -bottom-1 w-2.5 h-0.5 bg-[var(--brand-primary)] rounded-full animate-in zoom-in" />
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="relative group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[var(--brand-primary)] transition-colors" />
+                            <input
+                                type="text"
+                                placeholder={t('sidebar.search_placeholder') || "Search..."}
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                spellCheck={false}
+                                autoComplete="off"
+                                className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-[var(--brand-bg)] border-none text-sm focus:ring-2 focus:ring-[var(--brand-primary)] dark:text-white transition-all outline-none rounded-md"
+                            />
+                        </div>
                     </div>
                 )}
             </div>
@@ -438,13 +452,22 @@ export default function Sidebar({ onSelect, activeConversationId, onNewMessage, 
                         )}
                         <div className="flex-1 overflow-hidden">
                             <div className="flex justify-between mb-1">
-                                <span className="font-bold text-sm truncate w-32 dark:text-gray-200 flex items-center gap-1">
-                                    {conv.is_pinned && <Pin className="w-3 h-3 fill-blue-500 text-blue-500" />}
-                                    {conv.has_pending && (
-                                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" title="Pending Review"></span>
-                                    )}
-                                    {conv.client_name}
-                                </span>
+                                <div className="flex flex-col overflow-hidden">
+                                    <span className="font-bold text-sm truncate w-32 dark:text-gray-200 flex items-center gap-1">
+                                        {conv.is_pinned && <Pin className="w-3 h-3 fill-blue-500 text-blue-500" />}
+                                        {conv.has_pending && (
+                                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" title="Pending Review"></span>
+                                        )}
+                                        {conv.client_name}
+                                    </span>
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                        {conv.channel === 'email' && <Mail className="w-2.5 h-2.5 text-blue-400" />}
+                                        {conv.channel === 'whatsapp' && <MessageSquare className="w-2.5 h-2.5 text-emerald-500" />}
+                                        {conv.channel === 'instagram' && <Instagram className="w-2.5 h-2.5 text-pink-500" />}
+                                        {conv.channel === 'messenger' && <MessageCircle className="w-2.5 h-2.5 text-blue-600" />}
+                                        <span className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">{conv.channel}</span>
+                                    </div>
+                                </div>
                                 <div className="flex flex-col items-end shrink-0">
                                     <span className="text-[10px] text-gray-500 dark:text-gray-400 font-mono tabular-nums">
                                         {formatTime(conv.last_message_time)}
@@ -471,22 +494,6 @@ export default function Sidebar({ onSelect, activeConversationId, onNewMessage, 
                     <Trash2 className="w-4 h-4 mr-2" /> {t('common.delete')}
                 </Item>
             </Menu>
-
-            <div className="p-4 border-t dark:border-[var(--brand-border)] flex items-center justify-between text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest">
-                <span>v1.2.0 AUDIT</span>
-                {isAdmin && (
-                    <button
-                        onClick={() => onNavigate?.("admin")}
-                        aria-label="Open AI Configuration"
-                        className="flex items-center gap-1 transition-colors select-none hover-premium"
-                        style={{ color: "inherit" }}
-                        onMouseEnter={(e) => e.currentTarget.style.color = "var(--brand-primary)"}
-                        onMouseLeave={(e) => e.currentTarget.style.color = "inherit"}
-                    >
-                        <Settings className="w-3.5 h-3.5" /> {t('sidebar.ai_config')}
-                    </button>
-                )}
-            </div>
         </div >
     );
 }

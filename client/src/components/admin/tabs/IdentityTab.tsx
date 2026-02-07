@@ -8,7 +8,16 @@ interface Props {
 }
 
 export const IdentityTab = ({ config, setConfig }: Props) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
+
+    const handleLanguageChange = (lang: string) => {
+        setConfig({ ...config, language_code: lang });
+        if (lang.startsWith('en')) {
+            i18n.changeLanguage('en');
+        } else {
+            i18n.changeLanguage('es');
+        }
+    };
 
     return (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -77,7 +86,7 @@ export const IdentityTab = ({ config, setConfig }: Props) => {
                             <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('admin.fields.app_language')}</label>
                             <select
                                 value={config.language_code}
-                                onChange={(e) => setConfig({ ...config, language_code: e.target.value })}
+                                onChange={(e) => handleLanguageChange(e.target.value)}
                                 className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 dark:text-white outline-none"
                             >
                                 <option value="es-CR">{t('admin.languages.spanish')}</option>

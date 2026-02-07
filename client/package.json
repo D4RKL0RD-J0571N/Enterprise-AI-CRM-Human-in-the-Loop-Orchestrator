@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:ui": "npx playwright test",
+    "test:ui:stable": "npx playwright test --grep @stable",
+    "test:ui:update": "npx playwright test --update-snapshots"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.18",
@@ -17,11 +20,14 @@
     "react": "^19.2.0",
     "react-contexify": "^6.0.0",
     "react-dom": "^19.2.0",
-    "react-i18next": "^16.5.3"
+    "react-i18next": "^16.5.3",
+    "react-router-dom": "^6.21.0",
+    "recharts": "^3.7.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@types/node": "^24.10.1",
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^24.10.11",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
